@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Environment secrets
+.env
+.env.*
+
+# Local runtime directories & volumes
+steamcmd/
+pz-data/
+pz-backups/
+
+# Python cache & bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Markdown documentation (no se copia nada en el build)
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+Documents/*
+
+# IDE & system noise
+.idea/
+.vscode/
+.DS_Store
+*.swp
+.gemini/
+.agents/

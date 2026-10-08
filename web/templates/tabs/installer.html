@@ -1,0 +1,132 @@
+<!-- TAB: ASISTENTE DE CONFIGURACIÓN & INSTALACIÓN (PZ) -->
+<div class="card" style="margin-bottom: 24px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 14px;">
+    <div>
+      <h2 style="font-size: 1.3rem; font-weight: 700; color: #f0f6fc; display: flex; align-items: center; gap: 8px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Configuración Inicial del Servidor de Project Zomboid</span>
+      </h2>
+      <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 0.88rem;">
+        {% if is_installed %}
+        Binarios del servidor detectados en el volumen. Completa la configuración inicial de tu servidor antes de arrancarlo por primera vez.
+        {% else %}
+        Define la identidad del servidor antes de descargar los binarios con SteamCMD (AppID 380870). En el primer arranque el servidor generará <code>&lt;SERVER_NAME&gt;.ini</code> y su mundo automáticamente.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <form id="ark-installer-form" onsubmit="startServerInstallation(event)">
+
+    <!-- Paso 1: Mundo -->
+    <div style="margin-bottom: 24px;">
+      <label class="form-label" style="font-size: 0.9rem; font-weight: 600; color: #e6edf3; margin-bottom: 10px;">
+        1. Mundo del Servidor
+      </label>
+      <div style="background: rgba(13, 17, 23, 0.7); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; display: flex; align-items: center; gap: 14px;">
+        <div style="width: 46px; height: 46px; border-radius: 8px; background: linear-gradient(135deg, #2f4f1f, #0f380f); display: flex; align-items: center; justify-content: center; color: #c9e08a; font-size: 1.4rem; font-weight: 700; flex-shrink: 0;">K</div>
+        <div>
+          <div style="font-weight: 700; color: #f0f6fc;">Knox County (Mapa Base de Project Zomboid)</div>
+          <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 2px;">
+            PZ usa un único mundo persistente (Muldraugh, West Point, Louisville, etc.). La dificultad,
+            densidad de zombis y botín se ajustan después en <strong>Ajustes → Sandbox</strong>.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 2: Identidad y Acceso -->
+    <div style="margin-bottom: 24px;">
+      <label class="form-label" style="font-size: 0.9rem; font-weight: 600; color: #e6edf3; margin-bottom: 10px;">
+        2. Identidad del Servidor y Acceso
+      </label>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px;">
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label class="form-label" for="wizard-steam">Plataforma de Jugadores (Steam / No-Steam)</label>
+          <select id="wizard-steam" class="form-select">
+            <option value="true" {% if steam_mode %}selected{% endif %}>Steam — clientes de Steam; mods de Workshop automáticos</option>
+            <option value="false" {% if not steam_mode %}selected{% endif %}>No-Steam / GOG — arranca con -nosteam (los binarios se descargan igual)</option>
+          </select>
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">
+            En ambos modos los binarios del servidor se descargan automáticamente. En No-Steam los clientes usan
+            la versión GOG o Steam con <code>-nosteam</code>, y los mods de la Workshop se instalan manualmente.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wizard-session-name">Nombre del Servidor (SERVER_NAME)</label>
+          <input type="text" id="wizard-session-name" class="form-input" value="servertest" required
+                 title="Determina el archivo .ini, la carpeta de guardado y la base de datos (sin espacios).">
+          <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px;">Genera &lt;SERVER_NAME&gt;.ini y la carpeta de guardado.</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wizard-server-pass">Contraseña de Acceso (Opcional)</label>
+          <input type="text" id="wizard-server-pass" class="form-input" placeholder="Vacío si es público">
+          <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px;">Password del .ini (Pública si se deja vacío).</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wizard-admin-pass">Contraseña del Admin (Juego)</label>
+          <input type="text" id="wizard-admin-pass" class="form-input" value="adminpass" required>
+          <div style="font-size: 0.72rem; color: var(--text-dim); margin-top: 3px;">Evita el prompt interactivo del primer arranque (-adminpassword).</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wizard-max-players">Jugadores Máximos</label>
+          <input type="number" id="wizard-max-players" class="form-input" min="1" max="100" value="16" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="wizard-mode">Modo de Servidor</label>
+          <select id="wizard-mode" class="form-select">
+            <option value="pve" selected>PvE (Jugador contra Entorno)</option>
+            <option value="pvp">PvP (Jugador contra Jugador)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 3: Memoria JVM -->
+    <div style="margin-bottom: 24px;">
+      <label class="form-label" style="font-size: 0.9rem; font-weight: 600; color: #e6edf3; margin-bottom: 10px;">
+        3. Memoria del Servidor (JVM)
+      </label>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
+        <div class="form-group">
+          <label class="form-label" for="wizard-mem-min">Heap Mínimo (-Xms)</label>
+          <input type="text" id="wizard-mem-min" class="form-input" value="4g">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="wizard-mem-max">Heap Máximo (-Xmx)</label>
+          <input type="text" id="wizard-mem-max" class="form-input" value="6g">
+        </div>
+        <div style="display: flex; align-items: center;">
+          <span style="font-size: 0.78rem; color: var(--text-dim);">
+            Recomendado 4-8 GB sin mods y más con mods. Ajusta también el <code>mem_limit</code> del contenedor.
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paso 4: Mods (Solo modo Steam) -->
+    <div style="margin-bottom: 24px;">
+      <label class="form-label" style="font-size: 0.9rem; font-weight: 600; color: #e6edf3; margin-bottom: 10px;">
+        4. Mods de Steam Workshop (Opcional, solo modo Steam)
+      </label>
+      <input type="text" id="wizard-mods" class="form-input" placeholder="IDs numéricos de WorkshopItems separados por comas, ej: 2729973596,2687618628" style="margin-bottom: 8px;">
+      <span style="font-size: 0.75rem; color: var(--text-dim); display: block;">
+        El servidor de PZ descarga los mods de la Workshop en el arranque si están en <code>WorkshopItems=</code> y <code>Mods=</code>.
+        En modo No-Steam (GOG) los mods deben instalarse manualmente.
+      </span>
+    </div>
+
+    <div style="padding-top: 16px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px;">
+      <button type="submit" class="btn btn-primary" style="padding: 10px 24px; font-size: 0.92rem; display: inline-flex; align-items: center; gap: 8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span>{% if is_installed %}Guardar Configuración e Iniciar Servidor{% else %}Guardar Configuración y Descargar Servidor{% endif %}</span>
+      </button>
+    </div>
+  </form>
+</div>

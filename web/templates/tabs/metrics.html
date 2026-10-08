@@ -1,0 +1,71 @@
+<!-- TAB: MÉTRICAS Y TELEMETRÍA (PZ) -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+  <div>
+    <h2 style="margin: 0; font-size: 1.4rem; font-weight: 700; color: #f0f6fc; display: flex; align-items: center; gap: 8px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      <span>Telemetría y Rendimiento del Servidor PZ</span>
+    </h2>
+    <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.88rem;">
+      Monitoreo en tiempo real de CPU, memoria del proceso JVM de Project Zomboid y almacenamiento.
+    </p>
+  </div>
+</div>
+
+<div class="grid-4" style="margin-bottom: 20px;">
+  <!-- Card 1: CPU Servidor -->
+  <div class="card" style="padding: 16px 18px; border-left: 3px solid #f59e0b; display: flex; flex-direction: column; justify-content: space-between; min-height: 106px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <span style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.5px;">CPU Servidor</span>
+      <span class="status-dot online" style="width: 6px; height: 6px;"></span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      <span id="val-cpu" style="font-size: 1.45rem; font-weight: 700; color: #f0f6fc; font-family: var(--font-mono);">0.0%</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-dim);" id="val-cpu-subtext">Carga de procesamiento del servidor PZ</div>
+  </div>
+
+  <!-- Card 2: RAM Servidor -->
+  <div class="card" style="padding: 16px 18px; border-left: 3px solid #38bdf8; display: flex; flex-direction: column; justify-content: space-between; min-height: 106px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <span style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.5px;">RAM Servidor</span>
+      <span id="val-ram-pct" style="font-size: 0.72rem; font-weight: 600; color: #58a6ff; font-family: var(--font-mono); background: rgba(56, 189, 248, 0.12); padding: 1px 6px; border-radius: 4px;"></span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      <span id="val-ark-ram" style="font-size: 1.45rem; font-weight: 700; color: #58a6ff; font-family: var(--font-mono);">0.0 GB</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-dim);">Memoria en uso por el proceso del servidor PZ</div>
+  </div>
+
+  <!-- Card 3: Supervivientes -->
+  <div class="card" style="padding: 16px 18px; border-left: 3px solid #3fb950; display: flex; flex-direction: column; justify-content: space-between; min-height: 106px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <span style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.5px;">Supervivientes</span>
+      <span class="status-dot online" style="width: 6px; height: 6px; background: #3fb950;"></span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      <span id="val-players-metric" style="font-size: 1.45rem; font-weight: 700; color: #3fb950; font-family: var(--font-mono);">0 / {{ max_players }}</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-dim);">Jugadores activos en la sesión</div>
+  </div>
+
+  <!-- Card 4: Almacenamiento -->
+  <div class="card" style="padding: 16px 18px; border-left: 3px solid #8957e5; display: flex; flex-direction: column; justify-content: space-between; min-height: 106px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <span style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.5px;">Almacenamiento</span>
+      <span id="val-disk-pct" style="font-size: 0.72rem; font-weight: 600; color: #a371f7; font-family: var(--font-mono); background: rgba(137, 87, 229, 0.15); padding: 1px 6px; border-radius: 4px;"></span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      <span id="val-disk" style="font-size: 1.22rem; font-weight: 700; color: #f0f6fc; font-family: var(--font-mono); white-space: nowrap;">0 / 0 GB</span>
+    </div>
+    <div style="font-size: 0.75rem; color: var(--text-dim);">Datos del mundo (Saves/Multiplayer)</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header" style="margin-bottom: 16px;">
+    <h3 style="font-size: 1.05rem; font-weight: 600; color: #f0f6fc;">Histórico en Tiempo Real</h3>
+  </div>
+  <div style="height: 380px; width: 100%;">
+    <canvas id="metrics-chart"></canvas>
+  </div>
+</div>

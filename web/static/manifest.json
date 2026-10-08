@@ -1,0 +1,18 @@
+{
+  "name": "PZ Server Manager",
+  "short_name": "PZ Manager",
+  "description": "Panel Web para servidores dedicados de Project Zomboid (Steam / No-Steam)",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/static/img/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

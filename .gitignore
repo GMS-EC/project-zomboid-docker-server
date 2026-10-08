@@ -1,0 +1,25 @@
+# Runtime volumes
+steamcmd/
+pz-data/
+pz-backups/
+pz-config/
+
+# Local dev data (fuera del contenedor)
+data/
+dev-data/
+
+# Environment secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# IDE & OS noise
+.idea/
+.vscode/
+.DS_Store
+*.swp

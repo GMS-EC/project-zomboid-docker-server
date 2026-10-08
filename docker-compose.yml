@@ -1,0 +1,54 @@
+---
+name: pz-server
+services:
+  pz-server:
+    image: pz-server-docker:latest
+    build: .
+    platform: linux/amd64
+    restart: unless-stopped
+    container_name: pz-server
+    stop_grace_period: 45s
+    # Límite de RAM del contenedor. Ajusta junto a SERVER_MEMORY_MIN/MAX.
+    # El heap JVM no debe acercarse demasiado a este límite (overhead + metaspace).
+    mem_limit: ${MEM_LIMIT:-7g}
+    ports:
+      - "16261:16261/udp"          # PZ Juego (handshake / conexión principal)
+      - "16262:16262/udp"          # PZ Conexión directa / listado de servidores
+      - "8580:8080"                # Panel Web (backend FastAPI - Fase 2+)
+      # RCON (Source RCON) es opcional y se gestionará desde la web. Por defecto el
+      # panel administra el servidor por la consola del proceso (stdin).
+      # Si algún día activas RCON, publica el puerto aquí:
+      # - "27015:27015/tcp"
+    environment:
+      # ============================================================
+      # SOLO VARIABLES DE INFRAESTRUCTURA.
+      # Toda la configuración del JUEGO (nombre, memoria, modo
+      # Steam/No-Steam, credenciales, rama, mods, horarios, RCON...) se
+      # gestiona desde la interfaz web (Setup/Ajustes) y se persiste en
+      # el volumen ./pz-config (/app/data). No pongas variables de juego
+      # aquí: el panel las sobrescribe desde la web.
+      # ============================================================
+
+      # --- Zona horaria y permisos (PUID/PGID) ---
+      - TZ=${TZ:-America/Guayaquil}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+
+      # --- Panel Web (infraestructura) ---
+      # El panel es el ÚNICO método de gestión del servidor (sin "modo solo servidor").
+      - PANEL_USER=${PANEL_USER:-admin}
+      - PANEL_PASSWORD=${PANEL_PASSWORD:-adminpassword}
+
+    volumes:
+      # Binarios del servidor dedicado (AppID 380870). Se descargan
+      # automáticamente desde el panel en modo Steam y No-Steam.
+      - ./steamcmd/pz:/home/steam/steamcmd/pz
+      # Datos del mundo: <SERVER_NAME>.ini, Saves/Multiplayer, db, Server, Logs
+      - ./pz-data:/home/steam/Zomboid
+      # Copias de seguridad (Backup Manager)
+      - ./pz-backups:/home/steam/pz-backups
+      # Configuración del PANEL (secreto + ajustes de juego hechos en la web)
+      - ./pz-config:/app/data
+
+    labels:
+      icon: https://projectzomboid.com/favicon.ico

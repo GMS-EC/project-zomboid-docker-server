@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}PZ Server Manager — Panel para Project Zomboid Dedicated Server{% endblock %}
+
+{% block content %}
+  <!-- Top Navigation Header (Dockraft Layout) -->
+  {% include "components/header.html" %}
+
+  <!-- Server Overview & Metrics Banner (Dockraft Layout) -->
+  {% include "components/banner.html" %}
+
+  <!-- Main Tabs View Container -->
+  <main class="main-container">
+    <!-- Tab 0: Asistente Inicial & Instalador -->
+    <section id="tab-installer" class="tab-pane {% if not is_setup_done %}active{% endif %}">
+      {% include "tabs/installer.html" %}
+    </section>
+
+    <!-- Tab 1: Consola -->
+    <section id="tab-console" class="tab-pane {% if is_setup_done %}active{% endif %}">
+      {% include "tabs/console.html" %}
+    </section>
+
+    <!-- Tab 2: Métricas de Recursos -->
+    <section id="tab-metrics" class="tab-pane">
+      {% include "tabs/metrics.html" %}
+    </section>
+
+    <!-- Tab 3: Jugadores -->
+    <section id="tab-players" class="tab-pane">
+      {% include "tabs/players.html" %}
+    </section>
+
+    <!-- Tab 4: Programar Tareas -->
+    <section id="tab-tasks" class="tab-pane">
+      {% include "tabs/tasks.html" %}
+    </section>
+
+    <!-- Tab 5: Respaldos -->
+    <section id="tab-backups" class="tab-pane">
+      {% include "tabs/backups.html" %}
+    </section>
+
+    <!-- Tab 6: Webhooks -->
+    <section id="tab-webhooks" class="tab-pane">
+      {% include "tabs/webhooks.html" %}
+    </section>
+
+    <!-- Tab 7: Configuración -->
+    <section id="tab-settings" class="tab-pane">
+      {% include "tabs/settings.html" %}
+    </section>
+
+    <!-- Tab 9: Mods -->
+    <section id="tab-mods" class="tab-pane">
+      {% include "tabs/mods.html" %}
+    </section>
+  </main>
+
+  <!-- Panel Footer (Dockraft Layout) -->
+  {% include "footer.html" %}
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/app.js?v=0.2.0"></script>
+{% endblock %}
