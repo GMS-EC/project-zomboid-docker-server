@@ -31,7 +31,7 @@ function attrJsStr(str) {
 let metricsChart = null;
 let currentInstanceId = "main";
 let isAutoScroll = true;
-let commandHistory = JSON.parse(localStorage.getItem("ark_cmd_history") || "[]");
+let commandHistory = JSON.parse(localStorage.getItem("pz_cmd_history") || localStorage.getItem("ark_cmd_history") || "[]");
 let cmdHistoryIndex = -1;
 let cmdDraft = "";
 
@@ -59,13 +59,10 @@ document.addEventListener("DOMContentLoaded", () => {
     loadMods();
     loadActivityLogs();
     initConsoleHistory();
-    if (typeof Files !== "undefined" && Files.init) {
-        Files.init();
-    }
 
     // Restaurar pestaña activa guardada
     const hash = window.location.hash ? window.location.hash.substring(1) : "";
-    const savedTab = hash || localStorage.getItem("ark_active_tab");
+    const savedTab = hash || localStorage.getItem("pz_active_tab") || localStorage.getItem("ark_active_tab");
     if (savedTab && savedTab !== "console" && document.getElementById(`tab-${savedTab}`)) {
         switchTab(savedTab);
     }
@@ -93,7 +90,7 @@ function switchTab(tabId) {
     if (navLink) navLink.classList.add("active");
     if (targetPane) targetPane.classList.add("active");
 
-    localStorage.setItem("ark_active_tab", tabId);
+    localStorage.setItem("pz_active_tab", tabId);
     if (window.history.replaceState) {
         window.history.replaceState(null, null, `#${tabId}`);
     }
@@ -318,7 +315,7 @@ function sendConsoleCommand() {
     if (commandHistory.length === 0 || commandHistory[commandHistory.length - 1] !== cmd) {
         commandHistory.push(cmd);
         if (commandHistory.length > 50) commandHistory.shift();
-        localStorage.setItem("ark_cmd_history", JSON.stringify(commandHistory));
+        localStorage.setItem("pz_cmd_history", JSON.stringify(commandHistory));
     }
     cmdHistoryIndex = -1;
     cmdDraft = "";
@@ -491,7 +488,9 @@ async function fetchMetricsOnce() {
         // Actualizar Tarjetas de Métricas
         if (document.getElementById("val-cpu")) document.getElementById("val-cpu").textContent = `${curr.cpu_percent}%`;
         if (document.getElementById("val-ram")) document.getElementById("val-ram").textContent = `${curr.ram_used_gb} / ${curr.ram_total_gb} GB`;
-        if (document.getElementById("val-ark-ram")) document.getElementById("val-ark-ram").textContent = `${curr.ark_ram_gb} GB`;
+        const pzRamGb = curr.pz_ram_gb !== undefined ? curr.pz_ram_gb : (curr.ark_ram_gb || 0.0);
+        const valPzRam = document.getElementById("val-pz-ram") || document.getElementById("val-ark-ram");
+        if (valPzRam) valPzRam.textContent = `${pzRamGb} GB`;
         if (document.getElementById("val-disk")) document.getElementById("val-disk").textContent = `${curr.disk_used_gb} / ${curr.disk_total_gb} GB`;
         const valDiskPct = document.getElementById("val-disk-pct");
         if (valDiskPct && curr.disk_percent !== undefined) {
@@ -520,8 +519,8 @@ async function fetchMetricsOnce() {
         if (topUptime) topUptime.textContent = curr.uptime_formatted;
         const topCpu = document.getElementById("top-server-cpu");
         if (topCpu) topCpu.textContent = `${isOffline ? 0.0 : curr.cpu_percent} %`;
-        const topArkMem = document.getElementById("top-server-ark-memory");
-        if (topArkMem) topArkMem.textContent = `${curr.ark_ram_gb} GB`;
+        const topPzMem = document.getElementById("top-server-pz-memory") || document.getElementById("top-server-ark-memory");
+        if (topPzMem) topPzMem.textContent = `${pzRamGb} GB`;
         const topDisk = document.getElementById("top-server-disk");
         if (topDisk) topDisk.textContent = `${curr.disk_used_gb} / ${curr.disk_total_gb} GB`;
         const topPlayers = document.getElementById("top-server-players");
@@ -557,7 +556,7 @@ async function fetchMetricsOnce() {
         }
 
         const statMemVal = document.getElementById("stat-mem-val");
-        if (statMemVal) statMemVal.textContent = `${curr.ark_ram_gb} GB`;
+        if (statMemVal) statMemVal.textContent = `${pzRamGb} GB`;
         const statMemBar = document.getElementById("stat-mem-bar");
         if (statMemBar) statMemBar.style.width = `${curr.ram_percent}%`;
 
@@ -570,7 +569,7 @@ async function fetchMetricsOnce() {
         if (metricsChart && data.history) {
             metricsChart.data.labels = data.history.map(h => h.timestamp);
             metricsChart.data.datasets[0].data = data.history.map(h => h.cpu_percent);
-            metricsChart.data.datasets[1].data = data.history.map(h => h.ark_ram_gb);
+            metricsChart.data.datasets[1].data = data.history.map(h => (h.pz_ram_gb !== undefined ? h.pz_ram_gb : h.ark_ram_gb));
             metricsChart.update("none");
         }
     } catch (e) {}

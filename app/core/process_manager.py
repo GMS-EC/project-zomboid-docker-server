@@ -23,7 +23,7 @@ class ProcessManager:
     """
     Controlador del ciclo de vida del servidor dedicado de Project Zomboid.
 
-    A diferencia de ARK (que usaba RCON), PZ administra su consola por STDIN del
+    Project Zomboid administra su consola por STDIN del
     proceso. Este manager:
       - Instala/actualiza con SteamCMD (AppID 380870) solo en modo Steam.
       - Arranca el lanzador real (vía pz_run.sh) con stdin en modo PIPE.
@@ -351,7 +351,7 @@ class ProcessManager:
             "USE_STEAM": "true" if settings.use_steam else "false",
             "SERVER_NAME": settings.server_name,
             "ADMIN_USERNAME": settings.admin_username,
-            "ADMIN_PASSWORD": settings.admin_ark_password,
+            "ADMIN_PASSWORD": settings.server_admin_password,
             "SERVER_MEMORY_MIN": settings.memory_min,
             "SERVER_MEMORY_MAX": settings.memory_max,
             "OVERRIDE_LAUNCHER_MEMORY": "true" if settings.override_launcher_memory else "false",

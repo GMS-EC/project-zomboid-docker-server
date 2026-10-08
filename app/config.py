@@ -74,7 +74,7 @@ class Settings:
         self.in_container: bool = Path("/home/steam").is_dir()
         self._server_name: str = "servertest"
         self._admin_username: str = "admin"
-        self._admin_ark_password: str = "adminpass"
+        self._server_admin_password: str = "adminpass"
         self._use_steam: bool = True
         self._update_on_start: bool = True
         self._autostart_server: bool = False
@@ -108,9 +108,8 @@ class Settings:
         # FIFO de control cuando el panel NO posee el proceso (modo solo-servidor)
         self.control_fifo: Path = Path(os.getenv("PZ_CONTROL_FIFO", "/run/pz/zomboid.control"))
 
-        # Ruta al lanzador del server y scripts
+        # Ruta al lanzador del server
         self.pz_run_script: Path = Path(os.getenv("PZ_RUN_SCRIPT", "/home/steam/scripts/pz_run.sh"))
-        self.start_script: Path = Path(os.getenv("PZ_START_SCRIPT", "/home/steam/scripts/start.sh"))
 
     # ------------------------------------------------------------------ runtime
     def _rt(self, key: str, default: Any = None):
@@ -157,8 +156,13 @@ class Settings:
         return str(self._rt("admin_username", self._admin_username))
 
     @property
+    def server_admin_password(self) -> str:
+        return str(self._rt("admin_password", self._server_admin_password))
+
+    @property
     def admin_ark_password(self) -> str:
-        return str(self._rt("admin_password", self._admin_ark_password))
+        """Alias para compatibilidad retroactiva."""
+        return self.server_admin_password
 
     @property
     def server_password(self) -> str:

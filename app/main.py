@@ -95,7 +95,7 @@ class BroadcastRequest(BaseModel):
 
 
 def _augment_metrics(metrics: dict, include_players: bool = False) -> dict:
-    """Compatibiliza el diccionario de métricas con el frontend portado de ARK."""
+    """Garantiza la compatibilidad de métricas para el frontend."""
     m = dict(metrics or {})
     m.setdefault("pz_ram_gb", m.get("ark_ram_gb", 0.0))
     m.setdefault("ark_ram_gb", m.get("pz_ram_gb", 0.0))
@@ -105,10 +105,6 @@ def _augment_metrics(metrics: dict, include_players: bool = False) -> dict:
         m["session_name"] = settings.server_name
         m["world"] = settings.world_label
     return m
-
-
-def _placeholder_success(area: str):
-    return {"success": False, "error": f"'{area}' llegará en fases posteriores del panel PZ."}
 
 
 # --- Páginas HTML ---------------------------------------------------------------

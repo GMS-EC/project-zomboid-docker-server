@@ -14,7 +14,7 @@
   <div class="stat-box">
     <div class="stat-label">
       <span>RAM Servidor</span>
-      <span id="stat-mem-val">{{ metrics.ark_ram_gb }} GB</span>
+      <span id="stat-mem-val">{{ metrics.pz_ram_gb or metrics.ark_ram_gb }} GB</span>
     </div>
     <div class="progress-bar-bg">
       <div class="progress-bar-fill" id="stat-mem-bar" style="width: {{ metrics.ram_percent }}%;"></div>
