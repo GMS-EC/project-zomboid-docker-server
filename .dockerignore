@@ -10,6 +10,16 @@
 steamcmd/
 pz-data/
 pz-backups/
+dev-data/
+data/
+
+# Python virtualenvs, tests & reference projects
+.venv/
+venv/
+tests/
+.pytest_cache/
+.coverage
+*.log
 
 # Python cache & bytecode
 __pycache__/

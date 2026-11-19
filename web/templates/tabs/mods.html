@@ -1,103 +1,123 @@
-<!-- TAB: MODS DE STEAM WORKSHOP (Project Zomboid) -->
+<!-- TAB: GESTOR INTELIGENTE DE MODS DE PROJECT ZOMBOID -->
+<div id="mods-nosteam-notice" class="card" {% if steam_mode %}style="display: none;"{% else %}style="border-color: rgba(210, 153, 34, 0.4);"{% endif %}>
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+    <div>
+      <h3 style="margin: 0 0 6px 0; font-size: 1.05rem; color: #f2cc60;">Mods Deshabilitados en Modo No-Steam / GOG (-nosteam)</h3>
+      <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+        Con <strong>No-Steam / GOG</strong> activo, Steam Workshop está deshabilitada y la gestión de mods del servidor permanece bloqueada. Cambia la plataforma a <strong>Steam</strong> en Ajustes &rarr; Motor si deseas habilitar mods.
+      </p>
+    </div>
+    <button type="button" class="btn btn-outline" onclick="switchTab('settings')">Ir a Ajustes</button>
+  </div>
+</div>
+
+<div id="mods-steam-content" {% if not steam_mode %}style="display: none;"{% endif %}>
 <div class="overview-banner" style="margin-bottom: 20px;">
   <div class="overview-item">
-    <div class="overview-label">Mods Configurados</div>
+    <div class="overview-label">WorkshopItems</div>
     <div class="overview-val" id="mods-count-val">0</div>
   </div>
   <div class="overview-item">
-    <div class="overview-label">Origen</div>
-    <div class="overview-val" style="color: #79c0ff; font-size: 1rem;">Steam Workshop</div>
+    <div class="overview-label">Mod IDs Activos</div>
+    <div class="overview-val" id="mods-ids-count-val" style="color: #7ee2b4;">0</div>
   </div>
   <div class="overview-item">
-    <div class="overview-label">Descarga Automática</div>
-    <div class="overview-val" style="color: #3fb950; font-size: 1rem;">Al Iniciar (Steam)</div>
+    <div class="overview-label">Mapas Configurados</div>
+    <div class="overview-val" id="mods-maps-count-val" style="color: #79c0ff; font-size: 0.92rem;">Muldraugh, KY</div>
   </div>
-  <div class="overview-item" style="display: flex; align-items: center; gap: 8px;">
-    <button type="button" class="btn btn-primary" onclick="updateModsNow()" title="Comprobar y descargar actualizaciones de mods">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span>Actualizar Mods Ahora</span>
+  <div class="overview-item" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+    <button type="button" class="btn btn-primary" onclick="resolveModsCatalog()" title="Consultar Steam Workshop y escanear mod.info locales para completar Mod IDs">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      <span>Detectar Mod IDs (Steam / Local)</span>
     </button>
   </div>
 </div>
 
 <div class="grid-2" style="gap: 20px; align-items: start;">
-  <!-- Columna Izquierda: Mods Activos y Añadir Manual -->
+  <!-- Columna Izquierda: Añadir Mod + Lista Enriquecida -->
   <div style="display: flex; flex-direction: column; gap: 20px;">
-    <!-- Tarjeta: Añadir Mod Manualmente -->
     <div class="card">
-      <div class="card-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-          <h3 style="margin: 0; font-size: 0.95rem; font-weight: 600;">Añadir Mod por Steam Workshop ID</h3>
-        </div>
+      <div class="card-header" style="margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Añadir Mod (Workshop ID o URL de Steam)</h3>
       </div>
       <div class="card-body">
-        <p style="font-size: 0.82rem; color: var(--text-dim); margin-top: 0; margin-bottom: 12px;">
-          Ingresa el ID numérico del mod de la URL de Steam Workshop
-          (<code>steamcommunity.com/sharedfiles/filedetails/?id=<b>2729973596</b></code>).
-          El valor se escribe en <code>WorkshopItems=</code> y <code>Mods=</code> del <code>&lt;SERVER_NAME&gt;.ini</code>.
-        </p>
-        <div style="display: flex; gap: 8px;">
-          <input type="number" id="new-mod-id" class="form-input" placeholder="Ej. 2729973596" style="flex: 1;" onkeydown="if(event.key==='Enter') addModManual()">
-          <button type="button" class="btn btn-primary" onclick="addModManual()" style="padding: 0 16px;">
-            <span>Añadir Mod</span>
-          </button>
-        </div>
-        <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 10px; line-height: 1.5;">
-          Requiere reiniciar el servidor para que PZ descargue y cargue los mods nuevos.
-        </div>
-      </div>
-    </div>
-
-    <!-- Tarjeta: Lista de Mods Activos -->
-    <div class="card">
-      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-          <h3 style="margin: 0; font-size: 0.95rem; font-weight: 600;">Mods Configurados en el Servidor</h3>
-        </div>
-        <button type="button" class="btn btn-outline" onclick="loadMods()" style="padding: 2px 8px; font-size: 0.75rem;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-          <span>Refrescar</span>
-        </button>
-      </div>
-      <div class="card-body" style="padding: 12px;">
-        <div id="active-mods-list" style="display: flex; flex-direction: column; gap: 8px;">
-          <div style="text-align: center; padding: 20px; color: var(--text-dim); font-size: 0.85rem;">
-            Cargando lista de mods...
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <input type="text" id="new-mod-id" class="form-input" placeholder="Workshop ID o URL (ej. 2729973596 o https://steamcommunity.com/.../?id=2729973596)" onkeydown="if(event.key==='Enter') addModManual()">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <input type="text" id="new-mod-text-id" class="form-input" placeholder="Mod ID manual opcional (ej. Brita)">
+            <input type="text" id="new-mod-map-folder" class="form-input" placeholder="Map Folder opcional (ej. RavenCreek)">
+          </div>
+          <div style="display: flex; justify-content: flex-end;">
+            <button type="button" class="btn btn-primary" onclick="addModManual()" style="padding: 8px 18px;">
+              <span>Añadir Mod y Detectar</span>
+            </button>
           </div>
         </div>
       </div>
     </div>
+
+    <div class="card">
+      <div class="card-header" style="margin-bottom: 10px;">
+        <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Importar Colección de Steam Workshop</h3>
+      </div>
+      <div class="card-body">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <input type="text" id="new-collection-id" class="form-input" placeholder="ID o URL de Colección (ej. 3123456789)" style="flex: 1; min-width: 190px;" onkeydown="if(event.key==='Enter') importWorkshopCollection()">
+          <button type="button" class="btn btn-secondary" onclick="importWorkshopCollection()" style="padding: 8px 16px;">Importar Colección</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Mods Configurados en el Servidor</h3>
+        <button type="button" class="btn btn-outline" onclick="loadMods()" style="padding: 4px 10px; font-size: 0.76rem;">Refrescar</button>
+      </div>
+      <div class="card-body" style="padding: 0;">
+        <div id="active-mods-list" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="text-align: center; padding: 20px; color: var(--text-dim); font-size: 0.85rem;">Cargando lista de mods...</div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Columna Derecha: Ayuda / Cómo funcionan los mods en PZ -->
-  <div class="card">
-    <div class="card-header">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <h3 style="margin: 0; font-size: 0.95rem; font-weight: 600;">Cómo funcionan los Mods en Project Zomboid</h3>
+  <!-- Columna Derecha: Edición Directa WorkshopItems vs Mods vs Map + Locales -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <div class="card">
+      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Configuración Exacta del .ini</h3>
+        <button type="button" class="btn btn-primary" onclick="saveDirectModsIni()" style="padding: 5px 14px; font-size: 0.8rem;">Guardar en .ini</button>
+      </div>
+      <div class="card-body" style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="mods-direct-workshop">WorkshopItems= (IDs Numéricos)</label>
+          <textarea id="mods-direct-workshop" class="form-input" rows="2" placeholder="2729973596;2687618628"></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="mods-direct-ids">Mods= (Mod IDs reales de mod.info)</label>
+          <textarea id="mods-direct-ids" class="form-input" rows="3" placeholder="ModID_1;ModID_2"></textarea>
+          <small style="color: var(--text-dim); font-size: 0.74rem; display: block; margin-top: 4px;">
+            Importante: PZ requiere en <code>Mods=</code> los IDs de texto definidos en cada <code>mod.info</code>, nunca el número de Workshop.
+          </small>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="mods-direct-map">Map= (Mapas del servidor, separados por ;)</label>
+          <input type="text" id="mods-direct-map" class="form-input" value="Muldraugh, KY">
+          <small style="color: var(--text-dim); font-size: 0.74rem; display: block; margin-top: 4px;">
+            Los mapas de mods deben ir ANTES de <code>Muldraugh, KY</code> (ej: <code>RavenCreek;Muldraugh, KY</code>).
+          </small>
+        </div>
       </div>
     </div>
-    <div class="card-body" style="padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-      <div style="font-size: 0.83rem; color: var(--text-muted); line-height: 1.55;">
-        <p style="margin: 0 0 10px 0;">
-          El servidor dedicado de PZ define sus mods en <code>&lt;SERVER_NAME&gt;.ini</code> con dos claves que van sincronizadas:
-        </p>
-        <ul style="margin: 0 0 10px 0; padding-left: 18px;">
-          <li><code>WorkshopItems=</code> — IDs numéricos (contenido a descargar de la Workshop).</li>
-          <li><code>Mods=</code> — mismos IDs que activa el servidor al cargar.</li>
-        </ul>
-        <p style="margin: 0 0 10px 0;">
-          <strong>Modo Steam:</strong> al iniciar, el servidor descarga automáticamente los items de la Workshop y aplica los mods activos.
-        </p>
-        <p style="margin: 0;">
-          <strong>Modo No-Steam (GOG):</strong> los mods deben instalarse manualmente en la carpeta del servidor; aquí solo se administra la lista del <code>.ini</code>.
-        </p>
+
+    <div class="card">
+      <div class="card-header" style="margin-bottom: 10px;">
+        <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Mods Detectados en Disco (mod.info)</h3>
       </div>
-      <div style="background: rgba(56, 139, 253, 0.08); border: 1px solid rgba(56, 139, 253, 0.2); border-radius: 6px; padding: 10px 12px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
-        Consejo: crea una colección pública en Steam y añade aquí sus IDs. Después de guardar, reinicia el servidor desde la <a href="javascript:void(0)" onclick="switchTab('console')" style="color:#58a6ff;">Consola</a>.
+      <div id="local-mods-detected" style="font-size: 0.82rem; color: var(--text-muted); max-height: 260px; overflow-y: auto;">
+        Escaneando carpetas locales...
       </div>
     </div>
   </div>
+</div>
 </div>

@@ -9,9 +9,7 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
-// Escapa una cadena para insertarla DENTRO de un string de JS delimitado por
-// comillas simples, dentro de un atributo HTML onclick="...". Previene que datos
-// externos (p. ej. nombres de jugadores) rompan el atributo o inyecten código.
+// Escapa comillas simples para strings inline en HTML onclick="..."
 function attrJsStr(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -26,6 +24,51 @@ function attrJsStr(str) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 }
+
+window.escapeHtml = escapeHtml;
+window.attrJsStr = attrJsStr;
+
+window.formatBytes = function (bytes) {
+    const b = Number(bytes || 0);
+    if (!Number.isFinite(b) || b <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const idx = Math.min(units.length - 1, Math.floor(Math.log(b) / Math.log(1024)));
+    const val = b / Math.pow(1024, idx);
+    return `${idx === 0 ? Math.round(val) : val.toFixed(1)} ${units[idx]}`;
+};
+
+window.readApiJson = async function (res) {
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('application/json')) {
+        try {
+            return await res.json();
+        } catch {
+            return {};
+        }
+    }
+    const text = await res.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { detail: text || res.statusText || `HTTP ${res.status}` };
+    }
+};
+
+(function () {
+    const _origFetch = window.fetch.bind(window);
+    window.fetch = async function (input, init) {
+        const url = typeof input === 'string' ? input : (input && input.url) || '';
+        const opts = init ? { ...init } : {};
+        if (url.startsWith('/api/') && !opts.cache) {
+            opts.cache = 'no-store';
+        }
+        const res = await _origFetch(input, opts);
+        if (res.status === 401 && url.startsWith('/api/')) {
+            window.location.href = '/login';
+        }
+        return res;
+    };
+})();
 
 // PZ Server Manager Main Client Script
 let metricsChart = null;
@@ -53,18 +96,28 @@ document.addEventListener("DOMContentLoaded", () => {
     initMetricsPolling();
     initChart();
     loadPlayers();
-    loadBackups();
     loadSettings();
-    loadTaskSettings();
+    const wizSteam = document.getElementById("wizard-steam");
+    if (wizSteam) onWizardSteamChange(wizSteam.value);
     loadMods();
-    loadActivityLogs();
     initConsoleHistory();
 
-    // Restaurar pestaña activa guardada
-    const hash = window.location.hash ? window.location.hash.substring(1) : "";
-    const savedTab = hash || localStorage.getItem("pz_active_tab") || localStorage.getItem("ark_active_tab");
-    if (savedTab && savedTab !== "console" && document.getElementById(`tab-${savedTab}`)) {
-        switchTab(savedTab);
+    // Si falta setup o instalación, abrir siempre en el instalador antes de restaurar la última pestaña
+    const installerPane = document.getElementById("tab-installer");
+    const needsSetup = installerPane && installerPane.dataset.needsSetup === "true";
+    if (needsSetup) {
+        switchTab("installer");
+        fetch("/api/status").then(r => r.json()).then(st => {
+            if (st && (st.status === "INSTALLING" || (st.install_progress && st.install_progress.running))) {
+                pollInstallerProgress();
+            }
+        }).catch(() => {});
+    } else {
+        const hash = window.location.hash ? window.location.hash.substring(1) : "";
+        const savedTab = hash || localStorage.getItem("pz_active_tab");
+        if (savedTab && savedTab !== "console" && document.getElementById(`tab-${savedTab}`)) {
+            switchTab(savedTab);
+        }
     }
 });
 
@@ -81,6 +134,9 @@ function initTabs() {
 }
 
 function switchTab(tabId) {
+    if (typeof App !== "undefined") {
+        App.activeTab = tabId;
+    }
     document.querySelectorAll(".nav-btn, .nav-item").forEach(el => el.classList.remove("active"));
     document.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active"));
 
@@ -108,23 +164,26 @@ function switchTab(tabId) {
         loadPlayers();
     }
 
-    if (tabId === "tasks") {
-        loadTaskSettings();
-        pollTasksStatusIfActive();
-    } else {
-        stopTasksStatusPolling();
+    if (tabId === "tasks" && typeof Tasks !== "undefined") {
+        Tasks.loadTasks();
     }
 
-    if (tabId === "webhooks") {
-        loadWebhookSettings();
+    if (tabId === "backups" && typeof Backups !== "undefined") {
+        Backups.loadBackups();
+    }
+
+    if (tabId === "webhooks" && typeof Webhooks !== "undefined") {
+        Webhooks.loadConfig();
     }
 
     if (tabId === "mods") {
         loadMods();
     }
 
-    if (tabId === "console") {
-        loadActivityLogs();
+    if (tabId === "logs") {
+        if (typeof Logs !== "undefined" && typeof Logs.loadLogs === "function") {
+            Logs.loadLogs(true);
+        }
     }
 
     if (tabId === "files") {
@@ -211,11 +270,9 @@ function initWebSocket() {
     }
 
     socket.onclose = (ev) => {
-        // Solo reconectar si este socket sigue siendo el actual (evita sockets huérfanos
-        // duplicados al cambiar de nodo o al reconectar).
+        // Evitar reconexiones duplicadas de sockets antiguos
         if (ws !== socket) return;
         ws = null;
-        // Cierre por sesión expirada / no autorizado: no reintentar en bucle infinito.
         if (ev && ev.code === 1008) {
             wsShouldReconnect = false;
             return;
@@ -232,6 +289,21 @@ function sendQuickCommand(cmd) {
         input.value = cmd;
         sendConsoleCommand();
     }
+}
+
+async function triggerCreateHorde() {
+    const raw = await App.prompt({
+        title: "Generar Horda (createhorde)",
+        message: "Indica cantidad y opcionalmente nombre del jugador (ej: 50 o 50 RickGrimes):",
+        defaultValue: "50",
+        confirmText: "Generar Horda"
+    });
+    if (!raw || !raw.trim()) return;
+    const parts = raw.trim().split(/\s+/);
+    const count = Math.max(1, Math.min(500, parseInt(parts[0], 10) || 50));
+    const target = parts.slice(1).join(" ").replace(/["']/g, "");
+    const cmd = target ? `createhorde ${count} "${target}"` : `createhorde ${count}`;
+    sendQuickCommand(cmd);
 }
 
 function toggleAutoScroll() {
@@ -288,8 +360,6 @@ function initConsoleHistory() {
 }
 
 async function copyServerAddress() {
-    // Project Zomboid: los clientes se conectan por IP:puerto (Direct Connect),
-    // tanto en la versión Steam como en la No-Steam (GOG).
     let port = 16261;
     try {
         const res = await fetch("/api/settings");
@@ -376,40 +446,6 @@ async function restartServer() {
 }
 
 // --- Acciones Rápidas (consola PZ) ---
-async function triggerReloadOptions() {
-    const ok = await App.confirm({
-        title: "Recargar Configuración",
-        message: "¿Enviar 'reloadoptions'? Las opciones de <ServerName>.ini se aplicarán en caliente.",
-        confirmText: "Recargar Opciones",
-        warning: true
-    });
-    if (!ok) return;
-    showToast("Enviando reloadoptions...", "info");
-    await sendCommandOrWs("reloadoptions");
-    showToast("reloadoptions enviado a la consola.", "success");
-}
-
-async function saveGameNow() {
-    showToast("Guardando estado del mundo (save)...", "info");
-    const res = await fetch("/api/server/save", { method: "POST" });
-    const data = await res.json();
-    if (data.success) {
-        showToast("Comando save enviado a la consola.", "success");
-    }
-}
-
-async function sendCommandOrWs(command) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(command);
-        return;
-    }
-    await fetch("/api/server/command", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: command })
-    });
-}
-
 async function triggerBroadcast() {
     const msg = await App.prompt({
         title: "Anuncio a Jugadores (servermsg)",
@@ -478,12 +514,46 @@ function initChart() {
 
 let metricsPollTimer = null;
 
+function onWizardSteamChange(val) {
+    const isSteam = String(val) !== "false";
+    const section = document.getElementById("wizard-mods-section");
+    const input = document.getElementById("wizard-mods");
+    if (section) section.style.display = isSteam ? "block" : "none";
+    if (input) {
+        input.disabled = !isSteam;
+        if (!isSteam) input.value = "";
+    }
+}
+
+function applySteamModeUI(isSteam) {
+    const enabled = Boolean(isSteam);
+    const tabBtn = document.getElementById("tab-btn-mods");
+    if (tabBtn) tabBtn.style.display = enabled ? "" : "none";
+
+    const notice = document.getElementById("mods-nosteam-notice");
+    const steamContent = document.getElementById("mods-steam-content");
+    if (notice) notice.style.display = enabled ? "none" : "block";
+    if (steamContent) {
+        steamContent.style.display = enabled ? "" : "none";
+        steamContent.querySelectorAll("input, textarea, select, button").forEach(el => {
+            el.disabled = !enabled;
+        });
+    }
+
+    if (!enabled && App.activeTab === "mods") {
+        switchTab("settings");
+    }
+}
+
 async function fetchMetricsOnce() {
     try {
         const res = await fetch("/api/metrics");
         const data = await res.json();
         const curr = data.current;
         const isOffline = curr.status === "OFFLINE";
+        if (curr.steam_mode !== undefined) {
+            applySteamModeUI(curr.steam_mode);
+        }
 
         // Actualizar Tarjetas de Métricas
         if (document.getElementById("val-cpu")) document.getElementById("val-cpu").textContent = `${curr.cpu_percent}%`;
@@ -511,8 +581,11 @@ async function fetchMetricsOnce() {
 
         // Actualizar Banner Superior
         const topStatus = document.getElementById("top-server-status");
+        const statusLabel = (curr.status === "INSTALLING" && curr.install_progress && curr.install_progress.percent !== undefined)
+            ? `INSTALLING (${Number(curr.install_progress.percent).toFixed(0)}%)`
+            : curr.status;
         if (topStatus) {
-            topStatus.textContent = curr.status;
+            topStatus.textContent = statusLabel;
             topStatus.className = `overview-val status-text-inline ${curr.status.toLowerCase()}`;
         }
         const topUptime = document.getElementById("top-server-uptime");
@@ -598,12 +671,11 @@ function initMetricsPolling() {
     });
 }
 
-// --- Jugadores & Moderación (Dockraft Enhanced) ---
-let playersCache = { online: [], history: [] };
+// --- Jugadores & Moderación (Dockraft Enhanced + Roles PZ) ---
+let playersCache = { online: [], history: [], banned: [], max_players: 32 };
 let activePlayerTab = "online";
 let playerSearchQuery = "";
 
-// Paleta de gradientes atractivos para avatares de supervivientes
 const AVATAR_GRADIENTS = [
     "linear-gradient(135deg, #4f46e5, #06b6d4)",
     "linear-gradient(135deg, #10b981, #059669)",
@@ -611,6 +683,15 @@ const AVATAR_GRADIENTS = [
     "linear-gradient(135deg, #ec4899, #8b5cf6)",
     "linear-gradient(135deg, #3b82f6, #1d4ed8)",
     "linear-gradient(135deg, #8b5cf6, #6366f1)"
+];
+
+const PZ_ROLES = [
+    { value: "none", label: "Estándar" },
+    { value: "observer", label: "Observer" },
+    { value: "gm", label: "GM" },
+    { value: "overseer", label: "Overseer" },
+    { value: "moderator", label: "Moderador" },
+    { value: "admin", label: "Admin" }
 ];
 
 function getAvatarGradient(name) {
@@ -625,26 +706,27 @@ function getAvatarGradient(name) {
 async function loadPlayers() {
     try {
         const res = await fetch("/api/players");
-        const data = await res.json();
+        const data = await window.readApiJson(res);
+        if (!res.ok) return;
+
         playersCache = {
             online: data.online || [],
-            history: data.history || []
+            history: data.history || [],
+            banned: data.banned || [],
+            max_players: Number(data.max_players || 32)
         };
 
-        // 1. Actualizar métricas del banner superior de jugadores
         const statOnline = document.getElementById("players-online-stat");
         if (statOnline) {
-            const maxP = (metricsChart && metricsChart.data && metricsChart.data.max_players) || 20;
-            statOnline.textContent = `${playersCache.online.length}`;
+            statOnline.textContent = `${playersCache.online.length} / ${playersCache.max_players}`;
         }
         const statHist = document.getElementById("players-history-stat");
         if (statHist) statHist.textContent = playersCache.history.length;
 
-        const bannedCount = playersCache.history.filter(p => p.banned).length;
+        const bannedCount = playersCache.banned.length || playersCache.history.filter(p => p.banned).length;
         const statBanned = document.getElementById("players-banned-stat");
         if (statBanned) statBanned.textContent = bannedCount;
 
-        // 2. Actualizar contadores en selector segmentado
         const countOnline = document.getElementById("count-tab-online");
         if (countOnline) countOnline.textContent = playersCache.online.length;
         const countHist = document.getElementById("count-tab-history");
@@ -653,6 +735,16 @@ async function loadPlayers() {
         renderPlayersList();
     } catch (e) {
         console.error("Error cargando jugadores:", e);
+    }
+}
+
+async function refreshOnlinePlayers() {
+    showToast("Consultando jugadores en consola (players)...", "info");
+    try {
+        await fetch("/api/players/refresh", { method: "POST" });
+        setTimeout(() => loadPlayers(), 650);
+    } catch (e) {
+        showToast("No se pudo consultar la lista de jugadores.", "error");
     }
 }
 
@@ -673,31 +765,42 @@ function renderPlayersList() {
     const tbody = document.getElementById("players-table-body");
     if (!tbody) return;
 
+    const onlineNames = new Set(playersCache.online.map(p => (p.name || "").toLowerCase()));
+    const onlineSteamIds = new Set(playersCache.online.map(p => p.steam_id).filter(Boolean));
+    const bannedNames = new Set(playersCache.banned.map(b => (b.username || b.name || "").toLowerCase()));
+    const bannedSteamIds = new Set(playersCache.banned.map(b => b.steam_id).filter(Boolean));
+
     let list = [];
     if (activePlayerTab === "online") {
         list = playersCache.online.map(p => ({
             name: p.name,
-            steam_id: p.steam_id,
+            steam_id: p.steam_id || "",
+            access_level: p.access_level || "none",
             is_online: true,
             banned: false,
             last_seen: p.last_seen || "En juego ahora"
         }));
     } else {
-        // En historial, cruzar con online para marcar los que estén activos
-        const onlineSteamIds = new Set(playersCache.online.map(p => p.steam_id));
-        list = playersCache.history.map(p => ({
-            name: p.name,
-            steam_id: p.steam_id,
-            is_online: onlineSteamIds.has(p.steam_id),
-            banned: !!p.banned,
-            last_seen: p.last_seen || p.first_seen || "-"
-        }));
+        list = playersCache.history.map(p => {
+            const lowName = (p.name || "").toLowerCase();
+            const isOnline = onlineNames.has(lowName) || (p.steam_id && onlineSteamIds.has(p.steam_id));
+            const isBanned = Boolean(p.banned) || bannedNames.has(lowName) || (p.steam_id && bannedSteamIds.has(p.steam_id));
+            return {
+                name: p.name,
+                steam_id: p.steam_id || "",
+                access_level: p.access_level || "none",
+                is_online: isOnline,
+                banned: isBanned,
+                last_seen: p.last_seen || p.first_seen || "-"
+            };
+        });
     }
 
     if (playerSearchQuery) {
         list = list.filter(p =>
-            p.name.toLowerCase().includes(playerSearchQuery) ||
-            p.steam_id.toLowerCase().includes(playerSearchQuery)
+            (p.name || "").toLowerCase().includes(playerSearchQuery) ||
+            (p.steam_id || "").toLowerCase().includes(playerSearchQuery) ||
+            (p.access_level || "").toLowerCase().includes(playerSearchQuery)
         );
     }
 
@@ -727,7 +830,7 @@ function renderPlayersList() {
         const tr = document.createElement("tr");
         const initial = (p.name || "?").charAt(0).toUpperCase();
         const gradient = getAvatarGradient(p.name);
-        const hasValidSteamId = p.steam_id && p.steam_id !== "N/A" && p.steam_id !== "Desconocido";
+        const hasValidSteamId = /^\d{15,20}$/.test(String(p.steam_id || ""));
 
         let statusBadge = "";
         if (p.banned) {
@@ -737,6 +840,9 @@ function renderPlayersList() {
         } else {
             statusBadge = `<span class="status-pill offline" style="font-size: 0.72rem; padding: 2px 8px; color: #8b949e;"><span class="status-dot offline"></span>Desconectado</span>`;
         }
+
+        const normRole = (!p.access_level || p.access_level === "user") ? "none" : p.access_level;
+        const roleOpts = PZ_ROLES.map(r => `<option value="${r.value}" ${normRole === r.value ? "selected" : ""}>${r.label}</option>`).join("");
 
         tr.innerHTML = `
             <td>
@@ -754,18 +860,23 @@ function renderPlayersList() {
                                 <span>Perfil de Steam</span>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                             </a>
-                        ` : '<span style="font-size: 0.72rem; color: var(--text-dim);">Consulta local</span>'}
+                        ` : '<span style="font-size: 0.72rem; color: var(--text-dim);">Usuario PZ / Sin SteamID</span>'}
                     </div>
                 </div>
             </td>
             <td>
-                <div class="steam-id-pill">
-                    <span>${escapeHtml(p.steam_id)}</span>
-                    ${hasValidSteamId ? `
-                        <button type="button" class="btn-copy-steam" onclick="copySteamId('${attrJsStr(p.steam_id)}')" title="Copiar SteamID al portapapeles">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                        </button>
-                    ` : ''}
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <div class="steam-id-pill">
+                        <span>${escapeHtml(p.steam_id || "Local / N/A")}</span>
+                        ${hasValidSteamId ? `
+                            <button type="button" class="btn-copy-steam" onclick="copySteamId('${attrJsStr(p.steam_id)}')" title="Copiar SteamID al portapapeles">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <select class="form-input" style="padding: 2px 6px; font-size: 0.74rem; height: 26px; width: 130px;" onchange="changePlayerRole('${attrJsStr(p.name)}', this.value)" title="Rol en Project Zomboid (setaccesslevel)">
+                        ${roleOpts}
+                    </select>
                 </div>
             </td>
             <td>
@@ -776,31 +887,27 @@ function renderPlayersList() {
             </td>
             <td>${statusBadge}</td>
             <td style="text-align: right;">
-                <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
-                    ${p.is_online && hasValidSteamId ? `
-                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.76rem; border-color: #58a6ff; color: #79c0ff;" onclick="messagePlayer('${attrJsStr(p.steam_id)}', '${attrJsStr(p.name)}')">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap;">
+                    ${p.is_online ? `
+                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.76rem; border-color: #a371f7; color: #d2a8ff;" onclick="openPlayerActionsModal('${attrJsStr(p.name)}')">
+                            <span>Acciones</span>
+                        </button>
+                        <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.76rem; border-color: #58a6ff; color: #79c0ff;" onclick="messagePlayer('${attrJsStr(p.name)}', '${attrJsStr(p.steam_id)}')">
                             <span>Mensaje</span>
                         </button>
-                    ` : ''}
-                    ${p.is_online && hasValidSteamId ? `
-                        <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.76rem;" onclick="kickPlayer('${attrJsStr(p.steam_id)}', '${attrJsStr(p.name)}')">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                        <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.76rem;" onclick="kickPlayer('${attrJsStr(p.name)}', '${attrJsStr(p.steam_id)}')">
                             <span>Expulsar</span>
                         </button>
                     ` : ''}
-                    ${!p.banned && hasValidSteamId ? `
-                        <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.76rem;" onclick="banPlayer('${attrJsStr(p.steam_id)}', '${attrJsStr(p.name)}')">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    ${!p.banned ? `
+                        <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.76rem;" onclick="banPlayer('${attrJsStr(p.name)}', '${attrJsStr(p.steam_id)}')">
                             <span>Banear</span>
                         </button>
-                    ` : ''}
-                    ${p.banned && hasValidSteamId ? `
-                        <button class="btn btn-success" style="padding: 4px 10px; font-size: 0.76rem;" onclick="unbanPlayer('${attrJsStr(p.steam_id)}', '${attrJsStr(p.name)}')">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                    ` : `
+                        <button class="btn btn-success" style="padding: 4px 10px; font-size: 0.76rem;" onclick="unbanPlayer('${attrJsStr(p.name)}', '${attrJsStr(p.steam_id)}')">
                             <span>Desbanear</span>
                         </button>
-                    ` : ''}
+                    `}
                 </div>
             </td>
         `;
@@ -817,10 +924,67 @@ function copySteamId(steamId) {
     });
 }
 
-async function messagePlayer(steamId, name) {
+async function changePlayerRole(name, accessLevel) {
+    try {
+        const res = await fetch("/api/players/role", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: name, access_level: accessLevel })
+        });
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(`Rol '${accessLevel}' asignado a ${name}.`, "success");
+            loadPlayers();
+        } else {
+            showToast(data.error || "No se pudo cambiar el rol.", "error");
+        }
+    } catch (e) {
+        showToast("Error asignando rol al jugador.", "error");
+    }
+}
+
+function openAddPlayerModal() {
+    const u = document.getElementById("add-player-username");
+    const p = document.getElementById("add-player-password");
+    const r = document.getElementById("add-player-role");
+    if (u) u.value = "";
+    if (p) p.value = "";
+    if (r) r.value = "none";
+    document.getElementById("modal-add-player")?.classList.add("open");
+    setTimeout(() => u?.focus(), 60);
+}
+
+async function submitAddPlayer() {
+    const username = document.getElementById("add-player-username")?.value.trim() || "";
+    const password = document.getElementById("add-player-password")?.value || "";
+    const access_level = document.getElementById("add-player-role")?.value || "none";
+    if (!username || !password) {
+        showToast("Usuario y contraseña requeridos.", "error");
+        return;
+    }
+    try {
+        const res = await fetch("/api/players/add", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password, access_level })
+        });
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            document.getElementById("modal-add-player")?.classList.remove("open");
+            showToast(`Usuario PZ '${username}' creado correctamente.`, "success");
+            loadPlayers();
+        } else {
+            showToast(data.error || "Error creando usuario PZ.", "error");
+        }
+    } catch (e) {
+        showToast("Error de conexión al crear usuario.", "error");
+    }
+}
+
+async function messagePlayer(name, steamId = "") {
     const msg = await App.prompt({
         title: `Mensaje a ${name}`,
-        message: `Escribe el mensaje privado in-game que se enviará en vivo a este jugador:`,
+        message: `Escribe el mensaje privado/aviso in-game para "${name}":`,
         placeholder: "ej: Hola, escribe tu mensaje para este jugador...",
         confirmText: "Enviar Mensaje"
     });
@@ -830,176 +994,136 @@ async function messagePlayer(steamId, name) {
         const res = await fetch("/api/players/message", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ steam_id: steamId, message: msg.trim() })
+            body: JSON.stringify({ username: name, steam_id: steamId || null, message: msg.trim() })
         });
-        const data = await res.json();
+        const data = await window.readApiJson(res);
         if (data.success) {
             showToast(`Mensaje enviado a ${name}.`, "success");
         } else {
-            showToast("Error enviando mensaje privado.", "error");
+            showToast(data.error || "Error enviando mensaje.", "error");
         }
     } catch (e) {
         showToast("Error de conexión al enviar mensaje.", "error");
     }
 }
 
-async function kickPlayer(steamId, name) {
+async function kickPlayer(name, steamId = "") {
     const ok = await App.confirm({
         title: "Expulsar Superviviente",
-        message: `¿Expulsar del servidor al superviviente "${name}" (SteamID: ${steamId})?`,
+        message: `¿Expulsar del servidor al superviviente "${name}"?`,
         confirmText: "Expulsar",
         danger: true
     });
     if (!ok) return;
     try {
-        await fetch("/api/players/kick", {
+        const res = await fetch("/api/players/kick", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ steam_id: steamId })
+            body: JSON.stringify({ username: name, steam_id: steamId || null })
         });
-        showToast(`Superviviente ${name} expulsado.`, "info");
-        loadPlayers();
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(`Superviviente ${name} expulsado.`, "info");
+            loadPlayers();
+        } else {
+            showToast(data.error || "Error al expulsar superviviente.", "error");
+        }
     } catch (e) {
         showToast("Error al expulsar superviviente.", "error");
     }
 }
 
-async function banPlayer(steamId, name) {
+async function banPlayer(name, steamId = "") {
     const ok = await App.confirm({
         title: "Banear Superviviente",
-        message: `¿Banear permanentemente del servidor al superviviente "${name}" (SteamID: ${steamId})?`,
+        message: `¿Banear permanentemente del servidor al superviviente "${name}"?`,
         confirmText: "Banear",
         danger: true
     });
     if (!ok) return;
     try {
-        await fetch("/api/players/ban", {
+        const res = await fetch("/api/players/ban", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ steam_id: steamId })
+            body: JSON.stringify({ username: name, steam_id: steamId || null })
         });
-        showToast(`Superviviente ${name} baneado.`, "error");
-        loadPlayers();
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(`Superviviente ${name} baneado.`, "error");
+            loadPlayers();
+        } else {
+            showToast(data.error || "Error al banear superviviente.", "error");
+        }
     } catch (e) {
         showToast("Error al banear superviviente.", "error");
     }
 }
 
-async function unbanPlayer(steamId, name) {
+async function unbanPlayer(name, steamId = "") {
     const ok = await App.confirm({
         title: "Desbanear Superviviente",
-        message: `¿Remover la sanción y permitir que "${name}" (SteamID: ${steamId}) vuelva a ingresar al servidor?`,
+        message: `¿Remover la sanción y permitir que "${name}" vuelva a ingresar al servidor?`,
         confirmText: "Desbanear"
     });
     if (!ok) return;
     try {
-        await fetch("/api/players/unban", {
+        const res = await fetch("/api/players/unban", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ steam_id: steamId })
+            body: JSON.stringify({ username: name, steam_id: steamId || null })
         });
-        showToast(`Sanción removida para ${name}.`, "success");
-        loadPlayers();
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(`Sanción removida para ${name}.`, "success");
+            loadPlayers();
+        } else {
+            showToast(data.error || "Error al desbanear superviviente.", "error");
+        }
     } catch (e) {
         showToast("Error al desbanear superviviente.", "error");
     }
 }
 
-// --- Backups ---
-async function loadBackups() {
+function openPlayerActionsModal(username) {
+    const modal = document.getElementById("modal-player-actions");
+    const hidden = document.getElementById("pa-target-username");
+    const title = document.getElementById("pa-target-title");
+    if (hidden) hidden.value = username || "";
+    if (title) title.textContent = `Acciones In-Game: ${username}`;
+    if (modal) modal.classList.add("open");
+}
+
+async function submitPlayerAction(action) {
+    const username = document.getElementById("pa-target-username")?.value.trim() || "";
+    let arg1 = "";
+    let arg2 = "";
+    if (action === "additem") {
+        arg1 = document.getElementById("pa-item-code")?.value.trim() || "";
+        arg2 = document.getElementById("pa-item-qty")?.value || "1";
+    } else if (action === "addvehicle") {
+        arg1 = document.getElementById("pa-vehicle-code")?.value.trim() || "Base.CarNormal";
+    } else if (action === "addxp") {
+        arg1 = document.getElementById("pa-xp-perk")?.value.trim() || "";
+        arg2 = document.getElementById("pa-xp-amount")?.value || "500";
+    } else if (action === "teleport") {
+        arg1 = document.getElementById("pa-teleport-target")?.value.trim() || "";
+    }
+
     try {
-        const res = await fetch("/api/backups");
-        const data = await res.json();
-        const tbody = document.getElementById("backups-table-body");
-        if (!tbody) return;
-        tbody.innerHTML = "";
-
-        if (data.backups.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color: var(--text-dim);">No existen copias de seguridad aún.</td></tr>`;
-            return;
-        }
-
-        data.backups.forEach(b => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td><strong>${escapeHtml(b.filename)}</strong></td>
-                <td>${b.size_mb} MB</td>
-                <td>${b.created_at}</td>
-                <td>
-                    <div style="display: inline-flex; align-items: center; gap: 6px;">
-                        <a href="/api/backups/download/${encodeURIComponent(b.filename)}" class="btn btn-outline" title="Descargar copia de seguridad" download style="padding: 4px 8px; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; color: #58a6ff; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); text-decoration: none; border-radius: 6px;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        </a>
-                        <button class="btn btn-warning" style="padding: 4px 10px; font-size: 11px;" onclick="restoreBackup('${attrJsStr(b.filename)}')">Restaurar</button>
-                        <button class="btn btn-danger" style="padding: 4px 10px; font-size: 11px;" onclick="deleteBackup('${attrJsStr(b.filename)}')">Eliminar</button>
-                    </div>
-                </td>
-            `;
-            tbody.appendChild(tr);
+        const res = await fetch("/api/players/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, action, arg1, arg2 })
         });
-    } catch (e) {}
-}
-
-async function createBackupNow() {
-    const name = await App.prompt({
-        title: "Crear Copia de Seguridad",
-        message: "Nombre descriptivo para identificar este respaldo (opcional):",
-        placeholder: "ej: antes_del_boss",
-        confirmText: "Crear Copia"
-    });
-    if (name === null) return;
-    showToast("Comprimiendo mundo guardado...", "info");
-    const res = await fetch("/api/backups/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name || null })
-    });
-    const data = await res.json();
-    if (data.success) {
-        showToast("Copia de seguridad generada con éxito.", "success");
-        loadBackups();
-    } else {
-        showToast(`Error creando backup: ${data.error}`, "error");
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(`Comando enviado: ${data.command || action}`, "success");
+        } else {
+            showToast(data.error || "No se pudo ejecutar la acción.", "error");
+        }
+    } catch (e) {
+        showToast("Error de conexión al ejecutar acción.", "error");
     }
-}
-
-async function restoreBackup(filename) {
-    const ok = await App.confirm({
-        title: "Restaurar Copia de Seguridad",
-        message: `¿Restaurar '${filename}'?\n\nLos datos actuales del mundo serán reemplazados (se creará una salvaguarda automática antes) y el servidor se reiniciará.`,
-        confirmText: "Restaurar Respaldo",
-        danger: true
-    });
-    if (!ok) return;
-    showToast("Restaurando copia...", "info");
-    const res = await fetch("/api/backups/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: filename })
-    });
-    const data = await res.json();
-    if (data.success) {
-        showToast("Mundo restaurado con éxito.", "success");
-    } else {
-        showToast(`Error al restaurar: ${data.error}`, "error");
-    }
-}
-
-async function deleteBackup(filename) {
-    const ok = await App.confirm({
-        title: "Eliminar Copia de Seguridad",
-        message: `¿Estás seguro de eliminar permanentemente la copia '${filename}'?`,
-        confirmText: "Eliminar",
-        danger: true
-    });
-    if (!ok) return;
-    await fetch("/api/backups/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: filename })
-    });
-    showToast("Copia eliminada.", "info");
-    loadBackups();
 }
 
 // --- Configuraciones Integrales de Project Zomboid (Server.ini / SandboxVars.lua / Motor) ---
@@ -1057,6 +1181,15 @@ async function loadSettings() {
             for (const [k, v] of Object.entries(s.panel)) {
                 setVal(`cfg-panel-${k}`, v);
             }
+            if (s.panel.use_steam !== undefined) {
+                applySteamModeUI(s.panel.use_steam);
+            }
+        }
+
+        // Perfiles detectados (<SERVER_NAME>.ini)
+        const dl = document.getElementById("cfg-profiles-list");
+        if (dl && Array.isArray(s.profiles)) {
+            dl.innerHTML = s.profiles.map(p => `<option value="${escapeHtml(p)}"></option>`).join("");
         }
 
         renderRawFileInEditor();
@@ -1070,6 +1203,8 @@ function renderRawFileInEditor() {
     if (!textarea || !cachedSettingsData) return;
     if (currentRawFileType === 'sandbox') {
         textarea.value = cachedSettingsData.raw_sandbox || "";
+    } else if (currentRawFileType === 'spawnregions') {
+        textarea.value = cachedSettingsData.raw_spawnregions || "";
     } else {
         textarea.value = cachedSettingsData.raw_ini || "";
     }
@@ -1077,23 +1212,21 @@ function renderRawFileInEditor() {
 
 function toggleRawFileView(type) {
     currentRawFileType = type;
-    const btnIni = document.getElementById("btn-raw-mode-ini");
-    const btnSandbox = document.getElementById("btn-raw-mode-sandbox");
-    if (btnIni && btnSandbox) {
-        if (type === 'ini') {
-            btnIni.style.background = 'rgba(56, 189, 248, 0.15)';
-            btnIni.style.borderColor = '#38bdf8';
-            btnIni.style.color = '#38bdf8';
-            btnSandbox.style.background = 'transparent';
-            btnSandbox.style.borderColor = 'var(--border-color)';
-            btnSandbox.style.color = 'var(--text-color)';
+    const mapBtns = {
+        ini: document.getElementById("btn-raw-mode-ini"),
+        sandbox: document.getElementById("btn-raw-mode-sandbox"),
+        spawnregions: document.getElementById("btn-raw-mode-spawnregions"),
+    };
+    for (const [key, btn] of Object.entries(mapBtns)) {
+        if (!btn) continue;
+        if (key === type) {
+            btn.style.background = 'rgba(56, 189, 248, 0.15)';
+            btn.style.borderColor = '#38bdf8';
+            btn.style.color = '#38bdf8';
         } else {
-            btnSandbox.style.background = 'rgba(56, 189, 248, 0.15)';
-            btnSandbox.style.borderColor = '#38bdf8';
-            btnSandbox.style.color = '#38bdf8';
-            btnIni.style.background = 'transparent';
-            btnIni.style.borderColor = 'var(--border-color)';
-            btnIni.style.color = 'var(--text-color)';
+            btn.style.background = 'transparent';
+            btn.style.borderColor = 'var(--border-color)';
+            btn.style.color = 'var(--text-color)';
         }
     }
     renderRawFileInEditor();
@@ -1102,16 +1235,18 @@ function toggleRawFileView(type) {
 async function saveRawFileCurrent() {
     const textarea = document.getElementById("raw-file-content");
     if (!textarea) return;
-    showToast(`Guardando archivo ${currentRawFileType === 'sandbox' ? 'SandboxVars.lua' : '.ini'}...`, "info");
+    const labelMap = { sandbox: 'SandboxVars.lua', spawnregions: 'spawnregions.lua', ini: '.ini' };
+    const lbl = labelMap[currentRawFileType] || '.ini';
+    showToast(`Guardando archivo ${lbl}...`, "info");
     try {
         const res = await fetch("/api/settings/raw", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ type: currentRawFileType, content: textarea.value })
         });
-        const r = await res.json();
+        const r = await window.readApiJson(res);
         if (r.success) {
-            showToast(`Archivo ${currentRawFileType === 'sandbox' ? 'SandboxVars.lua' : '.ini'} guardado con éxito.`, "success");
+            showToast(`Archivo ${lbl} guardado con éxito.`, "success");
             loadSettings();
         } else {
             showToast("Error al guardar archivo.", "error");
@@ -1159,6 +1294,9 @@ async function saveAllSettings(e) {
         });
         const r = await res.json();
         if (r.success) {
+            if (panel.use_steam !== undefined) {
+                applySteamModeUI(panel.use_steam !== "false");
+            }
             showToast("Ajustes guardados con éxito en Server.ini y SandboxVars.lua.", "success");
             loadSettings();
         } else {
@@ -1236,6 +1374,23 @@ function applyPreset(preset) {
         set("cfg-sandbox-multi_hit_zombies", "false");
         set("cfg-sandbox-rear_vulnerability", "3");
         showToast("Preset 'Corredores Letales' (Sprinters) aplicado.", "warning");
+    } else if (preset === 'six_months') {
+        set("cfg-sandbox-zombie_speed", "2");
+        set("cfg-sandbox-zombie_transmission", "1");
+        set("cfg-sandbox-zombie_strength", "2");
+        set("cfg-sandbox-zombie_toughness", "2");
+        set("cfg-sandbox-pop_multiplier", "2.0");
+        set("cfg-sandbox-pop_start_multiplier", "1.5");
+        set("cfg-sandbox-loot_food", "1");
+        set("cfg-sandbox-loot_canned_food", "1");
+        set("cfg-sandbox-loot_weapon", "1");
+        set("cfg-sandbox-loot_ammo", "1");
+        set("cfg-sandbox-water_shut", "1");
+        set("cfg-sandbox-elec_shut", "1");
+        set("cfg-sandbox-erosion_speed", "2");
+        set("cfg-sandbox-starter_kit", "false");
+        set("cfg-sandbox-multi_hit_zombies", "false");
+        showToast("Preset '6 Meses Después' aplicado. Pulsa Guardar Ajustes para aplicarlo.", "warning");
     } else if (preset === 'builder') {
         set("cfg-sandbox-zombie_speed", "3");
         set("cfg-sandbox-zombie_transmission", "3");
@@ -1257,99 +1412,88 @@ function applyPreset(preset) {
     }
 }
 
-
-// --- Automatizaciones del servidor PZ ---
-async function loadTaskSettings() {
-    try {
-        const res = await fetch("/api/tasks/config");
-        const cfg = await res.json();
-        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
-        setVal("task-schedule-enabled", String(!!cfg.schedule_enabled));
-        setVal("task-schedule-start", cfg.schedule_start || "20:00");
-        setVal("task-schedule-stop", cfg.schedule_stop || "00:00");
-        setVal("task-schedule-warn", cfg.schedule_warn_mins || 10);
-        setVal("task-backup-enabled", String(cfg.auto_backup_enabled !== false));
-        setVal("task-backup-hours", cfg.auto_backup_interval_hours || 6);
-        setVal("task-backup-max-count", cfg.backup_max_count || 10);
-        setVal("task-restart-hours", cfg.auto_restart_hours || 0);
-        setVal("task-restart-warn", cfg.restart_warn_mins || 10);
-    } catch (e) {
-        console.error("Error al cargar configuración de tareas:", e);
-    }
-}
-
-async function saveTaskSettings() {
-    const getVal = (id, fb) => { const el = document.getElementById(id); return el ? el.value : fb; };
-    const payload = {
-        schedule_enabled: getVal("task-schedule-enabled", "false") === "true",
-        schedule_start: getVal("task-schedule-start", "20:00"),
-        schedule_stop: getVal("task-schedule-stop", "00:00"),
-        schedule_warn_mins: parseInt(getVal("task-schedule-warn", "10")) || 10,
-        auto_backup_enabled: getVal("task-backup-enabled", "true") === "true",
-        auto_backup_interval_hours: parseInt(getVal("task-backup-hours", "6")) || 6,
-        backup_max_count: parseInt(getVal("task-backup-max-count", "10")) || 10,
-        auto_restart_hours: parseInt(getVal("task-restart-hours", "0")) || 0,
-        restart_warn_mins: parseInt(getVal("task-restart-warn", "10")) || 10
-    };
-    try {
-        const res = await fetch("/api/tasks/config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        const r = await res.json();
-        if (r.success) showToast("Horarios y tareas guardados.", "success");
-        else showToast("Error al guardar tareas.", "error");
-    } catch (e) {
-        showToast("Error de conexión al guardar tareas.", "error");
-    }
-}
-
-// --- Estado en tiempo real del planificador ---
-let tasksStatusTimer = null;
-async function pollTasksStatusIfActive() {
-    try {
-        const res = await fetch("/api/tasks/status");
-        const st = await res.json();
-        const txt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v === undefined || v === null) ? "--" : v; };
-        txt("ts-running", st.running ? "Activo" : "Detenido");
-        txt("ts-ticks", st.ticks || 0);
-        txt("ts-errors", st.errors || 0);
-        txt("ts-schedule", st.schedule || "--");
-        txt("ts-backup", st.backup || "--");
-        txt("ts-restart", st.restart || "--");
-        txt("ts-error-msg", st.error_msg || "");
-        const dot = document.getElementById("ts-status-dot");
-        if (dot) dot.style.background = st.running ? "#3fb950" : "#8b949e";
-    } catch (e) { /* ignorar */ }
-    tasksStatusTimer = setTimeout(pollTasksStatusIfActive, 5000);
-}
-function stopTasksStatusPolling() { if (tasksStatusTimer) clearTimeout(tasksStatusTimer); }
-
-async function triggerRestartSafeModal() {
+async function wipeWorldNow() {
     const ok = await App.confirm({
-        title: "Reinicio Seguro (5 minutos)",
-        message: "¿Programar el reinicio del servidor PZ en 5 minutos? Se enviarán avisos in-game (servermsg) y un guardado antes de apagar.",
-        confirmText: "Programar Reinicio",
-        warning: true
+        title: "Wipe de Mundo (Reiniciar Mapa al Día 1)",
+        message: "Se detendrá el servidor si está activo, se creará una copia de seguridad automática solo del mundo actual y se borrará Saves/Multiplayer/<SERVER_NAME>. Tus ajustes .ini, Sandbox, mods y cuentas se conservarán intactos. ¿Continuar?",
+        confirmText: "Confirmar Wipe de Mundo",
+        danger: true
     });
     if (!ok) return;
+
+    showToast("Creando respaldo de seguridad y limpiando mundo...", "info");
     try {
-        const res = await fetch("/api/server/restart_safe", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ minutes: 5 })
-        });
-        const r = await res.json();
-        if (r.success) showToast("Reinicio programado en 5 minutos.", "success");
-        else showToast("No se pudo programar el reinicio.", "error");
+        const res = await fetch("/api/server/wipe-world", { method: "POST" });
+        const data = await window.readApiJson(res);
+        if (res.ok && data.success) {
+            showToast(data.message || "Wipe de mundo completado.", "success");
+            if (typeof Backups !== "undefined") Backups.loadBackups();
+        } else {
+            showToast(data.detail || data.error || "No se pudo completar el wipe.", "error");
+        }
     } catch (e) {
-        showToast("Error al programar reinicio.", "error");
+        showToast("Error de conexión al ejecutar wipe de mundo.", "error");
+    }
+}
+
+
+async function runDiagnostics() {
+    const modal = document.getElementById("modal-diagnostics");
+    const body = document.getElementById("diagnostics-modal-body");
+    if (body) body.innerHTML = "<p style='color:var(--text-dim);'>Analizando consola, JVM, Workshop y configuración...</p>";
+    if (modal) modal.classList.add("open");
+
+    try {
+        const res = await fetch("/api/diagnostics");
+        const data = await window.readApiJson(res);
+        if (!res.ok) {
+            if (body) body.innerHTML = `<p style="color:#ff7b72;">${escapeHtml(data.detail || "No se pudo ejecutar diagnóstico.")}</p>`;
+            return;
+        }
+        const issues = Array.isArray(data.issues)
+            ? data.issues
+            : (data.has_issue ? [data] : []);
+
+        if (!issues.length) {
+            if (body) {
+                body.innerHTML = `
+                    <div style="padding:14px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:8px;color:#7ee2b4;">
+                        <strong>${escapeHtml(data.title || "Todo en orden")}</strong><br>
+                        <span style="font-size:0.84rem;color:var(--text-color);">${escapeHtml(data.recommendation || data.summary || "No se detectaron errores conocidos en los registros recientes.")}</span>
+                    </div>
+                `;
+            }
+            return;
+        }
+        if (body) {
+            body.innerHTML = issues.map(it => {
+                const sevColor = it.severity === "critical" || it.severity === "error" ? "#ff7b72" : "#f2cc60";
+                const excerptHtml = it.excerpt
+                    ? `<pre style="margin:8px 0 0 0;padding:8px;background:var(--bg-main);border:1px solid var(--border-color);border-radius:4px;font-family:var(--font-mono);font-size:0.74rem;overflow-x:auto;color:#e6edf3;">${escapeHtml(it.excerpt)}</pre>`
+                    : "";
+                return `
+                    <div style="margin-bottom:12px;padding:12px;background:var(--bg-subtle);border:1px solid var(--border-color);border-left:3px solid ${sevColor};border-radius:6px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+                            <span style="font-weight:700;color:${sevColor};">${escapeHtml(it.title || it.code || "Incidencia")}</span>
+                            ${it.source ? `<span class="badge" style="font-size:0.7rem;">${escapeHtml(it.source)}</span>` : ""}
+                        </div>
+                        <div style="font-size:0.82rem;color:var(--text-color);margin-bottom:6px;"><strong>Causa:</strong> ${escapeHtml(it.cause || it.description || "")}</div>
+                        <div style="font-size:0.82rem;color:#7ee2b4;"><strong>Solución recomendada:</strong> ${escapeHtml(it.recommendation || it.solution || "")}</div>
+                        ${excerptHtml}
+                    </div>
+                `;
+            }).join("");
+        }
+    } catch (e) {
+        if (body) body.innerHTML = `<p style="color:#ff7b72;">Error al ejecutar diagnóstico: ${escapeHtml(e.message)}</p>`;
     }
 }
 
 // --- Sistema de Diálogos Modales y Notificaciones (Dockraft Style) ---
 const App = {
+  activeTab: 'console',
+  escapeHtml,
+  attrJsStr,
   showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -1460,10 +1604,12 @@ const App = {
     return modal;
   },
 
-  confirm(options) {
+  confirm(options, messageArg, dangerArg) {
     return new Promise((resolve) => {
       const modal = this.ensureConfirmModal();
-      const opts = typeof options === 'string' ? { message: options } : (options || {});
+      const opts = typeof options === 'string'
+        ? (messageArg !== undefined ? { title: options, message: messageArg, danger: Boolean(dangerArg) } : { message: options })
+        : (options || {});
       const isDanger = Boolean(opts.danger || opts.type === 'danger');
       const isWarning = Boolean(opts.warning || opts.type === 'warning');
 
@@ -1543,10 +1689,12 @@ const App = {
     });
   },
 
-  prompt(options) {
+  prompt(options, messageArg, defaultArg) {
     return new Promise((resolve) => {
       const modal = this.ensurePromptModal();
-      const opts = typeof options === 'string' ? { message: options } : (options || {});
+      const opts = typeof options === 'string'
+        ? (messageArg !== undefined ? { title: options, message: messageArg, defaultValue: defaultArg ?? '' } : { message: options })
+        : (options || {});
       const titleEl = document.getElementById('modal-prompt-title-text');
       const msgEl = document.getElementById('modal-prompt-message');
       const inputEl = document.getElementById('modal-prompt-input');
@@ -1608,6 +1756,55 @@ function showToast(message, type = "info") {
 }
 
 // --- Asistente de Configuración Inicial & Descarga ---
+let installerPollTimer = null;
+
+function pollInstallerProgress() {
+    clearTimeout(installerPollTimer);
+    const card = document.getElementById("installer-progress-card");
+    const bar = document.getElementById("installer-progress-bar");
+    const pctEl = document.getElementById("installer-progress-pct");
+    const stepEl = document.getElementById("installer-progress-step");
+    const logEl = document.getElementById("installer-progress-log");
+    if (card) card.style.display = "block";
+
+    const tick = async () => {
+        try {
+            const res = await fetch("/api/status");
+            const st = await window.readApiJson(res);
+            const prog = st.install_progress || {};
+            const pct = Number(prog.percent || 0);
+            if (bar) bar.style.width = `${Math.max(2, Math.min(100, pct))}%`;
+            if (pctEl) pctEl.textContent = `${pct.toFixed(0)}%`;
+            if (stepEl && prog.step) stepEl.textContent = prog.step;
+            if (logEl && prog.last_line) logEl.textContent = prog.last_line;
+
+            const topStatus = document.getElementById("top-server-status");
+            if (topStatus && st.status === "INSTALLING") {
+                topStatus.textContent = `INSTALLING (${pct.toFixed(0)}%)`;
+                topStatus.className = "overview-val status-text-inline installing";
+            }
+
+            if (st.status === "INSTALLING" || prog.running) {
+                installerPollTimer = setTimeout(tick, 1500);
+            } else if (st.status === "RUNNING" || st.status === "STARTING") {
+                showToast("¡Servidor instalado e iniciándose!", "success");
+                setTimeout(() => {
+                    const instPane = document.getElementById("tab-installer");
+                    if (instPane) instPane.dataset.needsSetup = "false";
+                    switchTab("console");
+                }, 900);
+            } else if (st.is_installed && st.is_setup_done) {
+                showToast("Descarga de binarios finalizada.", "success");
+                const instPane = document.getElementById("tab-installer");
+                if (instPane) instPane.dataset.needsSetup = "false";
+            }
+        } catch (e) {
+            installerPollTimer = setTimeout(tick, 2000);
+        }
+    };
+    tick();
+}
+
 async function startServerInstallation(e) {
     if (e) e.preventDefault();
     const ok = await App.confirm({
@@ -1617,16 +1814,18 @@ async function startServerInstallation(e) {
     });
     if (!ok) return;
 
+    const useSteam = document.getElementById("wizard-steam") ? document.getElementById("wizard-steam").value === "true" : true;
     const payload = {
-        use_steam: document.getElementById("wizard-steam") ? document.getElementById("wizard-steam").value === "true" : true,
+        use_steam: useSteam,
         server_name: document.getElementById("wizard-session-name") ? document.getElementById("wizard-session-name").value.trim() : "servertest",
         server_password: document.getElementById("wizard-server-pass") ? document.getElementById("wizard-server-pass").value : "",
         admin_password: document.getElementById("wizard-admin-pass") ? document.getElementById("wizard-admin-pass").value : "adminpass",
-        max_players: document.getElementById("wizard-max-players") ? parseInt(document.getElementById("wizard-max-players").value) || 16 : 16,
+        max_players: document.getElementById("wizard-max-players") ? parseInt(document.getElementById("wizard-max-players").value, 10) || 16 : 16,
         pvp: document.getElementById("wizard-mode") ? document.getElementById("wizard-mode").value === "pvp" : false,
         memory_min: document.getElementById("wizard-mem-min") ? document.getElementById("wizard-mem-min").value : "4g",
         memory_max: document.getElementById("wizard-mem-max") ? document.getElementById("wizard-mem-max").value : "6g",
-        mod_ids: document.getElementById("wizard-mods") ? document.getElementById("wizard-mods").value : ""
+        branch: document.getElementById("wizard-branch") ? document.getElementById("wizard-branch").value : "",
+        mod_ids: useSteam && document.getElementById("wizard-mods") ? document.getElementById("wizard-mods").value : ""
     };
 
     showToast("Guardando configuración inicial...", "info");
@@ -1636,12 +1835,19 @@ async function startServerInstallation(e) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-        const data = await res.json();
+        const data = await window.readApiJson(res);
         if (data.success) {
-            showToast(data.message || "Configuración completada. Iniciando servidor...", "success");
-            setTimeout(() => {
-                window.location.reload();
-            }, 1200);
+            applySteamModeUI(useSteam);
+            showToast(data.message || "Configuración completada.", "success");
+            const instPane = document.getElementById("tab-installer");
+            if (instPane && !data.installing) {
+                instPane.dataset.needsSetup = "false";
+            }
+            if (data.installing) {
+                pollInstallerProgress();
+            } else {
+                setTimeout(() => switchTab("console"), 900);
+            }
         } else {
             showToast(data.error || "Error al iniciar la instalación.", "error");
         }
@@ -1650,51 +1856,173 @@ async function startServerInstallation(e) {
     }
 }
 
-// ==========================================
-// --- GESTIÓN DE MODS DE STEAM WORKSHOP ---
-let activeModsList = [];
+async function updateServerBinaries() {
+    const ok = await App.confirm({
+        title: "Actualizar / Validar Binarios (AppID 380870)",
+        message: "Se ejecutará DepotDownloader/SteamCMD para validar o actualizar los archivos del servidor PZ. El servidor debe estar detenido. ¿Continuar?",
+        confirmText: "Actualizar Binarios",
+        warning: true
+    });
+    if (!ok) return;
+
+    try {
+        const res = await fetch("/api/server/update", { method: "POST" });
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(data.message || "Actualización iniciada.", "success");
+            pollInstallerProgress();
+        } else {
+            showToast(data.error || data.detail || "No se pudo actualizar binarios.", "error");
+        }
+    } catch (e) {
+        showToast("Error al solicitar actualización de binarios.", "error");
+    }
+}
+
+// --- Gestor de Mods PZ ---
+let activeModsState = {
+    workshop_items: [],
+    mod_ids: [],
+    map_folders: ["Muldraugh, KY"],
+    catalog: [],
+    standalone_mods: [],
+    local_mods: []
+};
+
+function _extractWorkshopId(raw) {
+    const val = String(raw || "").trim();
+    if (!val) return "";
+    if (/^\d+$/.test(val)) return val;
+    const match = val.match(/[?&]id=(\d+)/);
+    return match ? match[1] : "";
+}
 
 async function loadMods() {
     try {
         const res = await fetch("/api/mods");
-        const data = await res.json();
-        activeModsList = data.mods || [];
+        const data = await window.readApiJson(res);
+        if (!res.ok) return;
 
-        const countEl = document.getElementById("mods-count-val");
-        if (countEl) countEl.textContent = activeModsList.length;
-
-        const listContainer = document.getElementById("active-mods-list");
-        if (!listContainer) return;
-
-        if (activeModsList.length === 0) {
-            listContainer.innerHTML = `
-                <div style="text-align: center; padding: 24px; color: var(--text-dim); font-size: 0.85rem;">
-                    No hay mods configurados en el servidor actualmente.<br>
-                    Puedes añadir uno manualmente arriba o seleccionar uno del catálogo recomendado.
-                </div>`;
-            return;
+        if (data.steam_mode !== undefined) {
+            applySteamModeUI(data.steam_mode);
+            if (!data.steam_mode) return;
         }
 
-        listContainer.innerHTML = activeModsList.map((modId, index) => `
-            <div class="mod-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--bg-subtle); border: 1px solid var(--border-color); border-radius: 6px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-dim); width: 20px;">#${index + 1}</span>
-                    <div>
-                        <div style="font-weight: 600; font-size: 0.9rem; color: #79c0ff; font-family: var(--font-mono);">
-                            Mod ID: ${modId}
+        activeModsState = {
+            workshop_items: data.workshop_items || data.mods || [],
+            mod_ids: data.mod_ids || [],
+            map_folders: data.map_folders || ["Muldraugh, KY"],
+            catalog: data.catalog || [],
+            standalone_mods: data.standalone_mods || [],
+            local_mods: data.local_mods || []
+        };
+
+        const elWCount = document.getElementById("mods-count-val");
+        if (elWCount) elWCount.textContent = activeModsState.workshop_items.length;
+
+        const elMCount = document.getElementById("mods-ids-count-val");
+        if (elMCount) elMCount.textContent = activeModsState.mod_ids.length;
+
+        const elMapsVal = document.getElementById("mods-maps-count-val");
+        if (elMapsVal) elMapsVal.textContent = data.map_raw || "Muldraugh, KY";
+
+        const directW = document.getElementById("mods-direct-workshop");
+        if (directW) directW.value = data.workshop_items_raw || "";
+        const directM = document.getElementById("mods-direct-ids");
+        if (directM) directM.value = data.mods_names_raw || "";
+        const directMap = document.getElementById("mods-direct-map");
+        if (directMap) directMap.value = data.map_raw || "Muldraugh, KY";
+
+        const listContainer = document.getElementById("active-mods-list");
+        if (listContainer) {
+            if (!activeModsState.catalog.length && !activeModsState.standalone_mods.length) {
+                listContainer.innerHTML = `
+                    <div style="text-align: center; padding: 24px; color: var(--text-dim); font-size: 0.85rem;">
+                        No hay mods configurados en <code>WorkshopItems=</code> ni <code>Mods=</code>.<br>
+                        Añade un ID o URL de Steam Workshop arriba para detectarlo automáticamente.
+                    </div>`;
+            } else {
+                const cardsHtml = activeModsState.catalog.map((entry, idx) => {
+                    const wid = entry.workshop_id;
+                    const midsText = (entry.mod_ids && entry.mod_ids.length)
+                        ? entry.mod_ids.join("; ")
+                        : "<span style='color:#f2cc60;'>Sin Mod ID detectado (pulsa Detectar Mod IDs)</span>";
+                    const mapsText = (entry.map_folders && entry.map_folders.length)
+                        ? `<div style="font-size:0.74rem;color:#7ee2b4;margin-top:2px;">Mapas: ${escapeHtml(entry.map_folders.join("; "))}</div>`
+                        : "";
+                    const thumb = entry.preview_url
+                        ? `<img src="${escapeHtml(entry.preview_url)}" alt="" style="width:44px;height:44px;border-radius:6px;object-fit:cover;border:1px solid var(--border-color);flex-shrink:0;">`
+                        : `<div style="width:44px;height:44px;border-radius:6px;background:var(--bg-main);border:1px solid var(--border-color);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text-dim);flex-shrink:0;">#${idx + 1}</div>`;
+                    const srcBadge = entry.installed_locally
+                        ? '<span class="badge badge-success" style="font-size:0.68rem;">Local + Workshop</span>'
+                        : `<span class="badge" style="font-size:0.68rem;">${escapeHtml(entry.source || "manual")}</span>`;
+
+                    return `
+                        <div class="mod-card" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;background:var(--bg-subtle);border:1px solid var(--border-color);border-radius:8px;">
+                            <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;">
+                                ${thumb}
+                                <div style="min-width:0;">
+                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                        <strong style="font-size:0.9rem;color:#e6edf3;">${escapeHtml(entry.title || ("Workshop #" + wid))}</strong>
+                                        ${srcBadge}
+                                    </div>
+                                    <div style="font-size:0.76rem;color:#79c0ff;font-family:var(--font-mono);margin-top:2px;">
+                                        Workshop ID: ${escapeHtml(wid)}
+                                    </div>
+                                    <div style="font-size:0.76rem;color:var(--text-muted);font-family:var(--font-mono);word-break:break-all;">
+                                        Mod IDs: ${midsText}
+                                    </div>
+                                    ${mapsText}
+                                    <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=${escapeHtml(wid)}" target="_blank" rel="noopener noreferrer" style="font-size:0.73rem;color:#58a6ff;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:3px;">
+                                        <span>Ver en Steam Workshop</span>
+                                    </a>
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:5px;align-items:center;flex-shrink:0;">
+                                <button type="button" class="btn btn-outline" onclick="moveModOrder('${attrJsStr(wid)}', -1)" title="Subir prioridad de carga" style="padding:4px 8px;font-size:0.78rem;" ${idx === 0 ? "disabled" : ""}>↑</button>
+                                <button type="button" class="btn btn-outline" onclick="moveModOrder('${attrJsStr(wid)}', 1)" title="Bajar prioridad de carga" style="padding:4px 8px;font-size:0.78rem;" ${idx === activeModsState.catalog.length - 1 ? "disabled" : ""}>↓</button>
+                                <button type="button" class="btn btn-outline" onclick="removeMod('${attrJsStr(wid)}')" title="Quitar mod" style="padding:4px 10px;font-size:0.78rem;border-color:#f85149;color:#ff7b72;">
+                                    <span>Quitar</span>
+                                </button>
+                            </div>
                         </div>
-                        <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=${modId}" target="_blank" rel="noopener noreferrer" style="font-size: 0.75rem; color: #58a6ff; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
-                            <span>Ver en Steam Workshop</span>
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                        </a>
+                    `;
+                }).join("");
+
+                const standaloneHtml = activeModsState.standalone_mods.length ? `
+                    <div style="padding:10px 14px;background:rgba(210,153,34,0.08);border:1px solid rgba(210,153,34,0.3);border-radius:8px;">
+                        <div style="font-size:0.8rem;font-weight:600;color:#f2cc60;margin-bottom:6px;">Mod IDs adicionales en <code>Mods=</code>:</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                            ${activeModsState.standalone_mods.map(mid => `
+                                <span class="badge" style="font-family:var(--font-mono);font-size:0.74rem;display:inline-flex;align-items:center;gap:6px;">
+                                    ${escapeHtml(mid)}
+                                    <button type="button" style="background:none;border:none;color:#ff7b72;cursor:pointer;font-weight:700;padding:0;" onclick="removeStandaloneMod('${attrJsStr(mid)}')" title="Quitar Mod ID">×</button>
+                                </span>
+                            `).join("")}
+                        </div>
                     </div>
-                </div>
-                <button type="button" class="btn btn-outline" onclick="removeMod('${modId}')" title="Quitar mod" style="padding: 4px 10px; font-size: 0.78rem; border-color: #f85149; color: #ff7b72;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    <span>Quitar</span>
-                </button>
-            </div>
-        `).join("");
+                ` : "";
+
+                listContainer.innerHTML = cardsHtml + standaloneHtml;
+            }
+        }
+
+        const localBox = document.getElementById("local-mods-detected");
+        if (localBox) {
+            if (!activeModsState.local_mods.length) {
+                localBox.innerHTML = '<span style="color:var(--text-dim);">No se encontraron archivos <code>mod.info</code> locales aún (se descargan cuando SteamCMD/servidor arranque).</span>';
+            } else {
+                localBox.innerHTML = activeModsState.local_mods.map(lm => `
+                    <div style="padding:6px 8px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;gap:8px;align-items:center;">
+                        <div>
+                            <div style="font-weight:600;color:#e6edf3;">${escapeHtml(lm.name || lm.mod_id)}</div>
+                            <div style="font-family:var(--font-mono);font-size:0.75rem;color:#7ee2b4;">id=${escapeHtml(lm.mod_id)}${lm.workshop_id ? ` • workshop=${escapeHtml(lm.workshop_id)}` : ""}</div>
+                        </div>
+                        <button type="button" class="btn btn-outline btn-sm" style="padding:3px 8px;font-size:0.72rem;" onclick="enableLocalModId('${attrJsStr(lm.mod_id)}', '${attrJsStr((lm.map_folders || []).join(';'))}')">Activar</button>
+                    </div>
+                `).join("");
+            }
+        }
     } catch (e) {
         console.error("Error cargando mods:", e);
     }
@@ -1702,70 +2030,252 @@ async function loadMods() {
 
 async function addModManual() {
     const input = document.getElementById("new-mod-id");
+    const modTextInput = document.getElementById("new-mod-text-id");
+    const mapInput = document.getElementById("new-mod-map-folder");
     if (!input) return;
-    const modId = input.value.trim();
-    if (!modId || !/^[0-9]+$/.test(modId)) {
-        showToast("Por favor ingresa un Mod ID numérico válido de Steam.", "error");
+
+    const rawVal = input.value.trim();
+    const wid = _extractWorkshopId(rawVal);
+    const manualModId = (modTextInput?.value || "").trim();
+    const manualMap = (mapInput?.value || "").trim();
+
+    if (!wid && !manualModId) {
+        showToast("Ingresa un Workshop ID numérico, URL de Steam (?id=...), o un Mod ID manual.", "error");
         return;
     }
-    if (activeModsList.includes(modId)) {
-        showToast(`El mod ${modId} ya se encuentra en la lista.`, "warning");
-        return;
+
+    const wItems = [...activeModsState.workshop_items];
+    if (wid) {
+        if (wItems.includes(wid) && !manualModId && !manualMap) {
+            showToast(`El Workshop ID ${wid} ya está configurado.`, "warning");
+            return;
+        }
+        if (!wItems.includes(wid)) wItems.push(wid);
     }
-    activeModsList.push(modId);
-    await saveModsList();
-    input.value = "";
+
+    const mIds = [...activeModsState.mod_ids];
+    if (manualModId) {
+        manualModId.split(/[;,]/).map(s => s.trim()).filter(Boolean).forEach(m => {
+            if (!mIds.includes(m)) mIds.push(m);
+        });
+    }
+
+    const maps = [...activeModsState.map_folders];
+    if (manualMap) {
+        manualMap.split(/[;]/).map(s => s.trim()).filter(Boolean).forEach(mf => {
+            if (!maps.includes(mf)) {
+                const kyIdx = maps.indexOf("Muldraugh, KY");
+                if (kyIdx >= 0) maps.splice(kyIdx, 0, mf);
+                else maps.unshift(mf);
+            }
+        });
+    }
+
+    const catalog_hints = {};
+    if (wid && (manualModId || manualMap)) {
+        catalog_hints[wid] = {
+            mod_ids: manualModId ? manualModId.split(/[;,]/).map(s => s.trim()).filter(Boolean) : [],
+            map_folders: manualMap ? manualMap.split(/[;]/).map(s => s.trim()).filter(Boolean) : [],
+            source: "manual"
+        };
+    }
+
+    showToast("Guardando mod y consultando Steam Workshop...", "info");
+    try {
+        const res = await fetch("/api/mods", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                workshop_items: wItems.join(";"),
+                mods_names_raw: mIds.join(";"),
+                map_raw: maps.join(";"),
+                catalog_hints,
+                auto_resolve: true
+            })
+        });
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            input.value = "";
+            if (modTextInput) modTextInput.value = "";
+            if (mapInput) mapInput.value = "";
+            showToast("Mod guardado y catálogo sincronizado.", "success");
+            loadMods();
+        } else {
+            showToast("Error al guardar mod.", "error");
+        }
+    } catch (e) {
+        showToast("Error de conexión al guardar mod.", "error");
+    }
 }
 
-async function removeMod(modId) {
+async function enableLocalModId(modId, mapsStr = "") {
+    const mIds = [...activeModsState.mod_ids];
+    if (!mIds.includes(modId)) mIds.push(modId);
+    const maps = [...activeModsState.map_folders];
+    if (mapsStr) {
+        mapsStr.split(";").map(s => s.trim()).filter(Boolean).forEach(mf => {
+            if (!maps.includes(mf)) maps.unshift(mf);
+        });
+    }
+    const res = await fetch("/api/mods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            workshop_items: activeModsState.workshop_items.join(";"),
+            mods_names_raw: mIds.join(";"),
+            map_raw: maps.join(";")
+        })
+    });
+    const data = await window.readApiJson(res);
+    if (data.success) {
+        showToast(`Mod ID '${modId}' activado en Mods=`, "success");
+        loadMods();
+    }
+}
+
+async function removeMod(wid) {
     const ok = await App.confirm({
         title: "Quitar Mod",
-        message: `¿Deseas quitar el Mod ID ${modId} de la lista activa del servidor?`,
+        message: `¿Deseas quitar el Workshop ID ${wid} (y sus Mod IDs asociados) del servidor?`,
         confirmText: "Quitar Mod",
         warning: true
     });
     if (!ok) return;
-    activeModsList = activeModsList.filter(id => id !== modId);
-    await saveModsList();
-    showToast(`Mod ${modId} eliminado.`, "info");
+    const nextW = activeModsState.workshop_items.filter(id => id !== wid);
+    const res = await fetch("/api/mods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workshop_items: nextW.join(";") })
+    });
+    const data = await window.readApiJson(res);
+    if (data.success) {
+        showToast(`Mod ${wid} eliminado del .ini.`, "info");
+        loadMods();
+    }
 }
 
-async function saveModsList() {
+async function moveModOrder(wid, delta) {
+    const list = [...activeModsState.workshop_items];
+    const idx = list.indexOf(wid);
+    const targetIdx = idx + delta;
+    if (idx < 0 || targetIdx < 0 || targetIdx >= list.length) return;
+    const tmp = list[idx];
+    list[idx] = list[targetIdx];
+    list[targetIdx] = tmp;
+
+    // Reordenar Mod IDs conocidos siguiendo el nuevo orden de WorkshopItems
+    const catalogMap = {};
+    (activeModsState.catalog || []).forEach(c => { catalogMap[c.workshop_id] = c; });
+    const orderedModIds = [];
+    list.forEach(w => {
+        const mids = (catalogMap[w] && catalogMap[w].mod_ids) || [];
+        mids.forEach(m => { if (!orderedModIds.includes(m)) orderedModIds.push(m); });
+    });
+    (activeModsState.standalone_mods || []).forEach(m => {
+        if (!orderedModIds.includes(m)) orderedModIds.push(m);
+    });
+
+    const res = await fetch("/api/mods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            workshop_items: list.join(";"),
+            mods_names_raw: orderedModIds.length ? orderedModIds.join(";") : undefined
+        })
+    });
+    const data = await window.readApiJson(res);
+    if (data.success) {
+        loadMods();
+    }
+}
+
+async function importWorkshopCollection() {
+    const input = document.getElementById("new-collection-id");
+    const raw = (input?.value || "").trim();
+    if (!raw) {
+        showToast("Pega el ID o URL de una colección de Steam Workshop.", "error");
+        return;
+    }
+    showToast("Importando colección de Steam Workshop (esto puede tardar unos segundos)...", "info");
     try {
-        const raw_ids = activeModsList.join(",");
+        const res = await fetch("/api/mods/collection", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ collection: raw })
+        });
+        const data = await window.readApiJson(res);
+        if (res.ok && data.success) {
+            if (input) input.value = "";
+            showToast(`Colección #${data.collection_id} importada (${data.imported_count} mods).`, "success");
+            loadMods();
+        } else {
+            showToast(data.error || data.detail || "No se pudo importar la colección.", "error");
+        }
+    } catch (e) {
+        showToast("Error de conexión al importar colección.", "error");
+    }
+}
+
+async function removeStandaloneMod(modId) {
+    const nextMods = activeModsState.mod_ids.filter(id => id !== modId);
+    const res = await fetch("/api/mods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            workshop_items: activeModsState.workshop_items.join(";"),
+            mods_names_raw: nextMods.join(";")
+        })
+    });
+    const data = await window.readApiJson(res);
+    if (data.success) {
+        showToast(`Mod ID '${modId}' quitado de Mods=.`, "info");
+        loadMods();
+    }
+}
+
+async function resolveModsCatalog() {
+    showToast("Escaneando mod.info locales y consultando Steam Workshop...", "info");
+    try {
+        const res = await fetch("/api/mods/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sync_to_ini: true })
+        });
+        const data = await window.readApiJson(res);
+        if (data.success) {
+            showToast(`Catálogo actualizado (${data.count || 0} mods procesados).`, "success");
+            loadMods();
+        } else {
+            showToast("No se pudo resolver el catálogo de mods.", "error");
+        }
+    } catch (e) {
+        showToast("Error consultando Steam Workshop.", "error");
+    }
+}
+
+async function saveDirectModsIni() {
+    const workshop_items = document.getElementById("mods-direct-workshop")?.value.trim() || "";
+    const mods_names_raw = document.getElementById("mods-direct-ids")?.value.trim() || "";
+    const map_raw = document.getElementById("mods-direct-map")?.value.trim() || "Muldraugh, KY";
+    try {
         const res = await fetch("/api/mods", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mod_ids: raw_ids })
+            body: JSON.stringify({ workshop_items, mods_names_raw, map_raw })
         });
-        const data = await res.json();
+        const data = await window.readApiJson(res);
         if (data.success) {
+            showToast("Líneas WorkshopItems=, Mods= y Map= guardadas en .ini.", "success");
             loadMods();
         } else {
-            showToast("Error al guardar la lista de mods.", "error");
+            showToast("Error al guardar configuración exacta de mods.", "error");
         }
     } catch (e) {
-        showToast("Error de conexión al guardar mods.", "error");
+        showToast("Error de conexión al guardar .ini de mods.", "error");
     }
 }
 
-async function updateModsNow() {
-    showToast("Iniciando actualización de mods en segundo plano...", "info");
-    try {
-        const res = await fetch("/api/mods/update", { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-            showToast("Comprobando actualizaciones de mods. Revisa la consola en vivo.", "success");
-        } else {
-            showToast("No se pudo iniciar la actualización de mods.", "error");
-        }
-    } catch (e) {
-        showToast("Error de conexión al solicitar actualización.", "error");
-    }
-}
-
-// --- COMANDOS RÁPIDOS DE CONSOLA ---
-// --- FILTRO DE CONSOLA EN VIVO ---
+// --- Filtro de consola en vivo ---
 function filterConsoleLogs(term) {
     const consoleOutput = document.getElementById("console-output");
     if (!consoleOutput) return;
@@ -1780,176 +2290,4 @@ function filterConsoleLogs(term) {
             line.style.display = matches ? "" : "none";
         }
     }
-}
-
-// --- Webhooks de Discord (Dockraft Style) ---
-async function loadWebhookSettings() {
-    try {
-        const res = await fetch("/api/webhooks");
-        const data = await res.json();
-        
-        const input = document.getElementById("webhook-url");
-        if (input && data.url) input.value = data.url;
-
-        const langSelect = document.getElementById("webhook-lang");
-        if (langSelect && data.language) langSelect.value = data.language;
-
-        const ev = data.events || {};
-        const setCheck = (id, val) => {
-            const el = document.getElementById(id);
-            if (el) el.checked = val !== false;
-        };
-
-        setCheck("wh-evt-start", ev.start);
-        setCheck("wh-evt-starting", ev.starting);
-        setCheck("wh-evt-shutdown", ev.shutdown);
-        setCheck("wh-evt-shutdown-warn", ev.shutdown_warn);
-        setCheck("wh-evt-backup", ev.backup);
-        setCheck("wh-evt-save", ev.save);
-        setCheck("wh-evt-restart", ev.restart);
-        const elPlayers = document.getElementById("wh-evt-players");
-        if (elPlayers) elPlayers.checked = !!ev.players;
-    } catch (e) {
-        console.error("Error al cargar webhook:", e);
-    }
-}
-
-async function saveWebhookSettings() {
-    const input = document.getElementById("webhook-url");
-    const url = input ? input.value.trim() : "";
-    const lang = document.getElementById("webhook-lang")?.value || "es";
-
-    const getCheck = (id, fallback) => {
-        const el = document.getElementById(id);
-        return el ? el.checked : fallback;
-    };
-
-    const eventsPayload = {
-        start: getCheck("wh-evt-start", true),
-        starting: getCheck("wh-evt-starting", true),
-        shutdown: getCheck("wh-evt-shutdown", true),
-        shutdown_warn: getCheck("wh-evt-shutdown-warn", true),
-        backup: getCheck("wh-evt-backup", true),
-        save: getCheck("wh-evt-save", true),
-        restart: getCheck("wh-evt-restart", true),
-        players: getCheck("wh-evt-players", false)
-    };
-
-    try {
-        const res = await fetch("/api/webhooks", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url: url, language: lang, events: eventsPayload })
-        });
-        const data = await res.json();
-        if (data.success) {
-            showToast("Configuración de Webhook guardada exitosamente.", "success");
-        } else {
-            showToast("Error al guardar webhook.", "error");
-        }
-    } catch (e) {
-        showToast("Error de conexión al guardar webhook.", "error");
-    }
-}
-
-async function testWebhookNotification() {
-    const input = document.getElementById("webhook-url");
-    const url = input ? input.value.trim() : "";
-    if (!url) {
-        showToast("Por favor ingresa primero la URL del Webhook.", "error");
-        return;
-    }
-    showToast("Enviando notificación de prueba a Discord...", "info");
-    try {
-        const res = await fetch("/api/webhooks/test", { method: "POST" });
-        const data = await res.json();
-        if (data.success) {
-            showToast("¡Notificación entregada con éxito a tu canal de Discord!", "success");
-        } else {
-            showToast(data.error || "No se pudo entregar la notificación a Discord.", "error");
-        }
-    } catch (e) {
-        showToast("Error al probar notificación de Discord.", "error");
-    }
-}
-
-// --- Historial de Auditoría (7 Días) ---
-let activityLogsData = [];
-
-async function loadActivityLogs() {
-    const tbody = document.getElementById("activity-log-body");
-    if (!tbody) return;
-    try {
-        const res = await fetch("/api/activity");
-        const data = await res.json();
-        activityLogsData = data.activities || [];
-        const countBadge = document.getElementById("audit-count-badge");
-        if (countBadge) countBadge.textContent = `${activityLogsData.length} registros`;
-        renderActivityLogs(activityLogsData);
-    } catch (e) {
-        if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-dim); padding: 14px;">Error cargando historial de auditoría.</td></tr>`;
-    }
-}
-
-function renderActivityLogs(logs) {
-    const tbody = document.getElementById("activity-log-body");
-    if (!tbody) return;
-    if (!logs || logs.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-dim); padding: 16px;">No hay actividades registradas en los últimos 7 días.</td></tr>`;
-        return;
-    }
-
-    const categoryColors = {
-        "Servidor": "#58a6ff",
-        "Seguridad": "#f85149",
-        "Consola": "#79c0ff",
-        "PZ": "#3fb950",
-        "Mods": "#d29922",
-        "Jugadores": "#a371f7",
-        "Configuración": "#38bdf8",
-        "Webhooks": "#58a6ff",
-        "Tareas": "#e3b341",
-        "Backups": "#3fb950",
-        "Archivos": "#8b949e",
-        "Clúster": "#58a6ff",
-        "Instalación": "#f0883e"
-    };
-
-    const visible = logs.slice(0, 100);
-    const rows = visible.map(item => {
-        const color = categoryColors[item.category] || "#8b949e";
-        return `
-            <tr style="border-bottom: 1px solid var(--border-color);">
-                <td style="padding: 8px 14px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-dim); white-space: nowrap;">${escapeHtml(item.timestamp)}</td>
-                <td style="padding: 8px 14px; white-space: nowrap;">
-                    <span style="font-size: 0.72rem; font-weight: 600; padding: 2px 7px; border-radius: 4px; background: rgba(255,255,255,0.06); color: ${color}; border: 1px solid ${color}44;">
-                        ${escapeHtml(item.category)}
-                    </span>
-                </td>
-                <td style="padding: 8px 14px; color: var(--text-color); font-weight: 500; font-size: 0.8rem; white-space: nowrap;">${escapeHtml(item.user || "Sistema")}</td>
-                <td style="padding: 8px 14px; color: var(--text-muted); font-size: 0.82rem; word-break: break-word;">${escapeHtml(item.message)}</td>
-            </tr>
-        `;
-    }).join("");
-
-    // Limitar el DOM: se muestran las 100 más recientes (el filtro opera sobre el total)
-    if (logs.length > 100) {
-        rows += `<tr><td colspan="4" style="text-align:center; padding:10px; color:var(--text-dim); font-size:0.78rem;">Mostrando las 100 más recientes de ${logs.length} registros. Usa el buscador para filtrar.</td></tr>`;
-    }
-    tbody.innerHTML = rows;
-}
-
-function filterActivityLogs(query) {
-    if (!query || !query.trim()) {
-        renderActivityLogs(activityLogsData);
-        return;
-    }
-    const q = query.toLowerCase().trim();
-    const filtered = activityLogsData.filter(item => {
-        return (item.message && item.message.toLowerCase().includes(q)) ||
-               (item.category && item.category.toLowerCase().includes(q)) ||
-               (item.user && item.user.toLowerCase().includes(q)) ||
-               (item.timestamp && item.timestamp.toLowerCase().includes(q));
-    });
-    renderActivityLogs(filtered);
 }

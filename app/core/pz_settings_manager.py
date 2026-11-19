@@ -3,8 +3,10 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
+import httpx
+
 from app.config import settings
-from app.core.fs_utils import atomic_write_text
+from app.core.fs_utils import atomic_write_text, atomic_write_json
 from app.core.activity_manager import activity_manager
 
 
@@ -92,22 +94,22 @@ DEFAULT_INI_SETTINGS: Dict[str, str] = {
 # Valores predeterminados para SandboxVars.lua
 DEFAULT_SANDBOX_SETTINGS: Dict[str, Any] = {
     # ZombieLore
-    "zombie_speed": 2,          # 1=Sprinters, 2=Fast Shamblers, 3=Shamblers
-    "zombie_strength": 2,       # 1=Superhuman, 2=Normal, 3=Weak
-    "zombie_toughness": 2,      # 1=Tough, 2=Normal, 3=Fragile
-    "zombie_transmission": 1,   # 1=Blood+Saliva, 2=Saliva, 3=None
-    "zombie_mortality": 5,      # 1=Instant, 2=0-30s, 3=0-1m, 4=0-12h, 5=2-3d, 6=1-2w, 7=Never
-    "zombie_reanimate": 3,      # 1=Instant, 2=0-30s, 3=0-1m, 4=0-12h, 5=2-3d, 6=1-2w
-    "zombie_cognition": 3,      # 1=Navigate+Doors, 2=Navigate, 3=Basic
-    "zombie_crawl": 5,          # 1=Always, 2=Often, 3=Very Often, 4=Rare, 5=Never
-    "zombie_memory": 2,         # 1=Long, 2=Normal, 3=Short, 4=None
-    "zombie_decomp": 1,         # 1=Decay Slows+Weakens, 2=Slows, 3=Weakens, 4=No Effect
-    "zombie_sight": 2,          # 1=Eagle, 2=Normal, 3=Poor
-    "zombie_hearing": 2,        # 1=Pinpoint, 2=Normal, 3=Poor
-    "zombie_smell": 2,          # 1=Bloodhound, 2=Normal, 3=Poor
+    "zombie_speed": 2,
+    "zombie_strength": 2,
+    "zombie_toughness": 2,
+    "zombie_transmission": 1,
+    "zombie_mortality": 5,
+    "zombie_reanimate": 3,
+    "zombie_cognition": 3,
+    "zombie_crawl": 5,
+    "zombie_memory": 2,
+    "zombie_decomp": 1,
+    "zombie_sight": 2,
+    "zombie_hearing": 2,
+    "zombie_smell": 2,
     "zombie_thump_no_chase": False,
     "zombie_house_alarm": False,
-    "zombie_active_only": 1,    # 1=Both Day and Night, 2=Night, 3=Day
+    "zombie_active_only": 1,
 
     # ZombieConfig (Población)
     "pop_multiplier": 1.0,
@@ -125,27 +127,27 @@ DEFAULT_SANDBOX_SETTINGS: Dict[str, Any] = {
     "rally_group_radius": 3,
 
     # Entorno y Tiempo
-    "day_length": 2,            # 1=30m, 2=1h, 3=2h, 4=3h, 5=4h, 6=5h
-    "start_month": 7,           # 1-12
+    "day_length": 2,
+    "start_month": 7,
     "start_day": 9,
-    "start_time": 2,            # 1=7am, 2=9am, 3=12pm, 4=2pm, 5=5pm, 6=9pm, 7=12am, 8=2am, 9=5am
-    "water_shut": 2,            # 1=Instant, 2=0-30d, 3=0-2m, 4=0-6m, 5=0-1y, 6=0-5y, 7=2-6m, 8=Never
-    "elec_shut": 2,             # 1=Instant, 2=0-30d, etc.
+    "start_time": 2,
+    "water_shut": 2,
+    "elec_shut": 2,
     "water_shut_modifier": 14,
     "elec_shut_modifier": 14,
-    "temperature": 3,           # 1=Very Cold, 2=Cold, 3=Normal, 4=Hot, 5=Very Hot
-    "rain": 3,                  # 1=Very Dry, 2=Dry, 3=Normal, 4=Rainy, 5=Very Rainy
-    "erosion_speed": 3,         # 1=Very Fast (20d), 2=Fast (50d), 3=Normal (100d), 4=Slow (200d), 5=Very Slow
+    "temperature": 3,
+    "rain": 3,
+    "erosion_speed": 3,
     "erosion_days": 100,
-    "farming": 3,               # 1=Very Fast, 2=Fast, 3=Normal, 4=Slow, 5=Very Slow
-    "plant_resilience": 3,      # 1=Very High, 2=High, 3=Normal, 4=Low, 5=Very Low
-    "plant_abundance": 3,       # 1=Very Poor, 2=Poor, 3=Normal, 4=Abundant, 5=Very Abundant
-    "nature_abundance": 3,      # 1=Very Poor, 2=Poor, 3=Normal, 4=Abundant, 5=Very Abundant
-    "compost_time": 2,          # 1=1w, 2=2w, 3=3w, 4=4w, 5=6w, 6=8w, 7=10w, 8=12w
-    "darkness": 3,              # 1=Pitch Black, 2=Dark, 3=Normal
+    "farming": 3,
+    "plant_resilience": 3,
+    "plant_abundance": 3,
+    "nature_abundance": 3,
+    "compost_time": 2,
+    "darkness": 3,
     "fire_spread": True,
 
-    # Botín (Loot Rarity: 1=Extremely Rare, 2=Rare, 3=Normal, 4=Common, 5=Abundant)
+    # Botín
     "loot_food": 3,
     "loot_canned_food": 3,
     "loot_literature": 3,
@@ -159,39 +161,39 @@ DEFAULT_SANDBOX_SETTINGS: Dict[str, Any] = {
 
     # Personaje y Rasgos
     "xp_multiplier": 1.0,
-    "multi_hit_zombies": True,  # Multi-Hit con armas cuerpo a cuerpo
-    "stats_decrease": 3,        # 1=Very Fast, 2=Fast, 3=Normal, 4=Slow, 5=Very Slow
+    "multi_hit_zombies": True,
+    "stats_decrease": 3,
     "endurance_regen": 3,
     "nutrition": True,
     "starter_kit": False,
     "free_trait_points": 0,
-    "injury_severity": 2,       # 1=Low, 2=Normal, 3=High
+    "injury_severity": 2,
     "bone_fracture": True,
-    "rear_vulnerability": 2,    # 1=Low, 2=Medium, 3=High
+    "rear_vulnerability": 2,
 
     # Vehículos
     "enable_vehicles": True,
-    "car_spawn_rate": 3,        # 1=None, 2=Very Low, 3=Low, 4=Normal, 5=High
-    "chance_has_gas": 2,        # 1=Low, 2=Normal, 3=High
-    "initial_gas": 2,           # 1=Very Low, 2=Low, 3=Normal, 4=High, 5=Full
+    "car_spawn_rate": 3,
+    "chance_has_gas": 2,
+    "initial_gas": 2,
     "fuel_consumption": 1.0,
     "car_gas_consumption": 1.0,
-    "car_alarm_freq": 2,        # 1=Never, 2=Extremely Rare, 3=Rare, 4=Normal, 5=Common
+    "car_alarm_freq": 2,
     "locked_car": 3,
-    "car_condition": 2,         # 1=Very Low, 2=Low, 3=Normal, 4=High
+    "car_condition": 2,
     "car_damage_impact": 3,
     "crash_player_damage": True,
     "traffic_jam": True,
     "zombie_attraction_multiplier": 1.0,
 
     # Meta-Eventos, Historias y Generadores
-    "helicopter": 2,            # 1=Never, 2=Once, 3=Sometimes, 4=Often
-    "meta_event": 2,            # 1=Never, 2=Sometimes, 3=Often
+    "helicopter": 2,
+    "meta_event": 2,
     "sleeping_event": 2,
-    "survivor_house_chance": 3, # 1=Never, 2=Extremely Rare, 3=Rare, 4=Normal, 5=Often, 6=Very Often
+    "survivor_house_chance": 3,
     "vehicle_story_chance": 3,
     "zone_story_chance": 3,
-    "generator_spawning": 3,    # 1=Very Rare, 2=Rare, 3=Sometimes, 4=Often
+    "generator_spawning": 3,
     "generator_fuel_consumption": 1.0,
 
     # Mapa en el Juego
@@ -199,6 +201,21 @@ DEFAULT_SANDBOX_SETTINGS: Dict[str, Any] = {
     "allow_world_map": True,
     "map_all_known": False,
 }
+
+_BBCODE_RE = re.compile(r"\[/?[a-zA-Z0-9*=]+[^\]]*\]")
+_MOD_ID_LINE_RE = re.compile(r"(?:^|[\r\n])\s*Mod\s*IDs?\s*[:=]\s*([^\r\n]+)", re.IGNORECASE)
+_MAP_FOLDER_LINE_RE = re.compile(r"(?:^|[\r\n])\s*Map\s*(?:Folder|Name)?s?\s*[:=]\s*([^\r\n]+)", re.IGNORECASE)
+
+
+def _dedup_preserve(items: List[str]) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    for item in items:
+        clean = item.strip()
+        if clean and clean not in seen:
+            seen.add(clean)
+            out.append(clean)
+    return out
 
 
 def _lua_format_val(val: Any) -> str:
@@ -331,12 +348,7 @@ def generate_default_lua(values: Dict[str, Any]) -> str:
 
 
 class PzSettingsManager:
-    """
-    Gestor integral de opciones de Project Zomboid Dedicated Server:
-      - <SERVER_NAME>.ini (Identidad, red, PvP, Safehouses, chat, motor)
-      - <SERVER_NAME>_SandboxVars.lua (Dificultad, zombis, botín, vehículos, entorno)
-      - pz_panel_config.json (Memoria JVM -Xms/-Xmx, autoinicio, modo Steam/No-Steam)
-    """
+    """Gestor de configuración de PZ (<SERVER_NAME>.ini, SandboxVars.lua, spawnregions y mods)."""
 
     @property
     def ini_path(self) -> Path:
@@ -345,6 +357,14 @@ class PzSettingsManager:
     @property
     def sandbox_path(self) -> Path:
         return settings.data_dir / "Server" / f"{settings.server_name}_SandboxVars.lua"
+
+    @property
+    def spawnregions_path(self) -> Path:
+        return settings.data_dir / "Server" / f"{settings.server_name}_spawnregions.lua"
+
+    @property
+    def mods_catalog_path(self) -> Path:
+        return settings.panel_dir / "mods_catalog.json"
 
     # ------------------------------------------------------------- Lectura / Escritura INI
     def read_ini(self) -> Dict[str, str]:
@@ -363,7 +383,6 @@ class PzSettingsManager:
         return data
 
     def set_ini_values(self, values: Dict[str, str]) -> bool:
-        """Sobrescribe o inserta claves en el .ini conservando el resto."""
         try:
             self.ini_path.parent.mkdir(parents=True, exist_ok=True)
             current = self.read_ini()
@@ -400,7 +419,6 @@ class PzSettingsManager:
 
         try:
             text = self.sandbox_path.read_text(encoding="utf-8", errors="replace")
-            # Buscar cada token en el archivo Lua
             token_map = {
                 "zombie_speed": r"ZombieLore\s*=\s*\{[^}]*Speed\s*=\s*(\d+)",
                 "zombie_strength": r"ZombieLore\s*=\s*\{[^}]*Strength\s*=\s*(\d+)",
@@ -523,7 +541,6 @@ class PzSettingsManager:
         return data
 
     def save_sandbox(self, values: Dict[str, Any]) -> bool:
-        """Guarda o actualiza las variables en SandboxVars.lua."""
         try:
             self.sandbox_path.parent.mkdir(parents=True, exist_ok=True)
             if not self.sandbox_path.exists():
@@ -532,8 +549,6 @@ class PzSettingsManager:
                 return True
 
             text = self.sandbox_path.read_text(encoding="utf-8", errors="replace")
-
-            # Mapa de reemplazo directo sobre el archivo existente
             replace_map = {
                 "zombie_speed": ("ZombieLore", "Speed"),
                 "zombie_strength": ("ZombieLore", "Strength"),
@@ -640,12 +655,10 @@ class PzSettingsManager:
                 tbl, token = replace_map[key]
                 formatted = _lua_format_val(val)
                 if tbl:
-                    # Token dentro de una tabla (ej. ZombieLore = { ... Speed = 2 ... })
                     pat = re.compile(rf"({tbl}\s*=\s*\{{[^}}]*\b{token}\s*=\s*)[^,}}\n]+", re.DOTALL)
                     if pat.search(text):
                         text = pat.sub(rf"\g<1>{formatted}", text)
                 else:
-                    # Token plano (ej. DayLength = 2,)
                     pat = re.compile(rf"(\b{token}\s*=\s*)[^,}}\n]+")
                     if pat.search(text):
                         text = pat.sub(rf"\g<1>{formatted}", text)
@@ -672,39 +685,514 @@ class PzSettingsManager:
         except Exception:
             return False
 
-    # ------------------------------------------------------------- Mods
-    def get_mods(self) -> Dict[str, Any]:
-        ini = self.read_ini()
-        workshop = ini.get("WorkshopItems", "")
-        mods_raw = ini.get("Mods", workshop)
-        items = [m.strip() for m in re.split(r"[;,]", workshop) if m.strip()]
+    # ------------------------------------------------------------- SpawnRegions & Perfiles
+    VANILLA_SPAWN_REGIONS = (
+        "Muldraugh, KY",
+        "Riverside, KY",
+        "Rosewood, KY",
+        "West Point, KY",
+    )
+
+    def _default_spawnregions_lua(self, custom_maps: Optional[List[str]] = None) -> str:
+        vanilla_low = {v.lower() for v in self.VANILLA_SPAWN_REGIONS}
+        lines = ["function SpawnRegions()", "\treturn {"]
+        seen = set()
+        for m in (custom_maps or []):
+            clean = str(m or "").replace('"', "").replace("\n", "").replace("\r", "").strip()
+            if not clean or clean.lower() in vanilla_low or clean.lower() in seen:
+                continue
+            seen.add(clean.lower())
+            lines.append(f'\t\t{{ name = "{clean}", file = "media/maps/{clean}/spawnpoints.lua" }},')
+        for v in self.VANILLA_SPAWN_REGIONS:
+            lines.append(f'\t\t{{ name = "{v}", file = "media/maps/{v}/spawnpoints.lua" }},')
+        lines.extend(["\t}", "end", ""])
+        return "\n".join(lines)
+
+    def get_raw_spawnregions(self) -> str:
+        if self.spawnregions_path.exists():
+            try:
+                return self.spawnregions_path.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+        return self._default_spawnregions_lua()
+
+    def save_raw_spawnregions(self, content: str) -> bool:
+        try:
+            self.spawnregions_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(self.spawnregions_path, content)
+            activity_manager.log("Configuración", "Archivo spawnregions.lua actualizado directamente")
+            return True
+        except Exception:
+            return False
+
+    def sync_spawnregions(self, map_folders: List[str]) -> bool:
+        """Sincroniza mapas personalizados en <SERVER_NAME>_spawnregions.lua antes de Muldraugh."""
+        try:
+            vanilla_low = {v.lower() for v in self.VANILLA_SPAWN_REGIONS}
+            preserved_lines: List[str] = []
+            seen = set()
+            if self.spawnregions_path.exists():
+                for raw in self.spawnregions_path.read_text(encoding="utf-8", errors="replace").splitlines():
+                    m_name = re.search(r'\{\s*name\s*=\s*"([^"]+)"', raw)
+                    if m_name:
+                        rname = m_name.group(1).strip()
+                        if rname.lower() not in vanilla_low and rname.lower() not in seen:
+                            seen.add(rname.lower())
+                            preserved_lines.append("\t\t" + raw.strip().rstrip(",") + ",")
+
+            for m in (map_folders or []):
+                clean = str(m or "").replace('"', "").replace("\n", "").replace("\r", "").strip()
+                if not clean or clean.lower() in vanilla_low or clean.lower() in seen:
+                    continue
+                seen.add(clean.lower())
+                preserved_lines.append(f'\t\t{{ name = "{clean}", file = "media/maps/{clean}/spawnpoints.lua" }},')
+
+            lines = ["function SpawnRegions()", "\treturn {"]
+            lines.extend(preserved_lines)
+            for v in self.VANILLA_SPAWN_REGIONS:
+                lines.append(f'\t\t{{ name = "{v}", file = "media/maps/{v}/spawnpoints.lua" }},')
+            lines.extend(["\t}", "end", ""])
+
+            self.spawnregions_path.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(self.spawnregions_path, "\n".join(lines))
+            return True
+        except Exception:
+            return False
+
+    def list_profiles(self) -> List[str]:
+        server_dir = settings.data_dir / "Server"
+        profiles: List[str] = [settings.server_name]
+        if server_dir.is_dir():
+            for f in sorted(server_dir.glob("*.ini")):
+                if f.is_file() and f.stem and f.stem not in profiles:
+                    profiles.append(f.stem)
+        return profiles
+
+    # ------------------------------------------------------------- Mods Inteligentes PZ
+    def _load_mods_catalog(self) -> Dict[str, Any]:
+        if not self.mods_catalog_path.exists():
+            return {}
+        try:
+            data = json.loads(self.mods_catalog_path.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _save_mods_catalog(self, catalog: Dict[str, Any]) -> None:
+        try:
+            atomic_write_json(self.mods_catalog_path, catalog, indent=2)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _parse_mod_info(mod_info_file: Path) -> Dict[str, Any]:
+        info: Dict[str, Any] = {"name": "", "id": "", "description": "", "require": "", "maps": []}
+        try:
+            for raw in mod_info_file.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                key = k.strip().lower()
+                val = v.strip()
+                if key in ("name", "id", "description", "require", "modversion"):
+                    info[key] = val
+        except Exception:
+            pass
+
+        # Detectar carpetas de mapas dentro de media/maps/
+        maps_dir = mod_info_file.parent / "media" / "maps"
+        if maps_dir.is_dir():
+            for child in sorted(maps_dir.iterdir()):
+                if child.is_dir() and not child.name.startswith("."):
+                    info["maps"].append(child.name)
+        return info
+
+    def scan_local_mods(self) -> Dict[str, Any]:
+        """Escanea mod.info locales en Workshop (108600) y carpetas mods/."""
+        by_workshop: Dict[str, Dict[str, Any]] = {}
+        by_mod_id: Dict[str, Dict[str, Any]] = {}
+
+        workshop_roots = [
+            settings.server_dir / "steamapps" / "workshop" / "content" / "108600",
+            settings.data_dir / "Workshop" / "steamapps" / "workshop" / "content" / "108600",
+        ]
+        for wroot in workshop_roots:
+            if not wroot.is_dir():
+                continue
+            for wid_dir in wroot.iterdir():
+                if not wid_dir.is_dir() or not wid_dir.name.isdigit():
+                    continue
+                wid = wid_dir.name
+                mod_ids: List[str] = []
+                map_folders: List[str] = []
+                titles: List[str] = []
+                for mod_info in wid_dir.rglob("mod.info"):
+                    parsed = self._parse_mod_info(mod_info)
+                    if parsed["id"]:
+                        mod_ids.append(parsed["id"])
+                    if parsed["name"]:
+                        titles.append(parsed["name"])
+                    map_folders.extend(parsed["maps"])
+                entry = {
+                    "workshop_id": wid,
+                    "title": titles[0] if titles else "",
+                    "mod_ids": _dedup_preserve(mod_ids),
+                    "map_folders": _dedup_preserve(map_folders),
+                    "installed_locally": True,
+                    "source": "mod.info",
+                }
+                by_workshop[wid] = entry
+                for mid in entry["mod_ids"]:
+                    by_mod_id[mid] = {
+                        "mod_id": mid,
+                        "name": entry["title"] or mid,
+                        "workshop_id": wid,
+                        "map_folders": entry["map_folders"],
+                        "installed_locally": True,
+                    }
+
+        # Mods sueltos (No-Steam / manuales) en data_dir/mods
+        local_mods_dir = settings.data_dir / "mods"
+        if local_mods_dir.is_dir():
+            for mod_info in local_mods_dir.rglob("mod.info"):
+                parsed = self._parse_mod_info(mod_info)
+                mid = parsed.get("id")
+                if mid and mid not in by_mod_id:
+                    by_mod_id[mid] = {
+                        "mod_id": mid,
+                        "name": parsed.get("name") or mid,
+                        "workshop_id": "",
+                        "map_folders": _dedup_preserve(parsed.get("maps", [])),
+                        "installed_locally": True,
+                    }
+
+        if by_workshop:
+            catalog = self._load_mods_catalog()
+            for wid, info in by_workshop.items():
+                prev = catalog.get(wid, {})
+                merged = {
+                    **prev,
+                    **{k: v for k, v in info.items() if v},
+                    "mod_ids": info["mod_ids"] or prev.get("mod_ids", []),
+                    "map_folders": info["map_folders"] or prev.get("map_folders", []),
+                    "installed_locally": True,
+                }
+                catalog[wid] = merged
+            self._save_mods_catalog(catalog)
+
+        return {"by_workshop": by_workshop, "by_mod_id": by_mod_id}
+
+    @staticmethod
+    def _extract_ids_from_steam_description(desc: str) -> Dict[str, List[str]]:
+        if not desc:
+            return {"mod_ids": [], "map_folders": []}
+        clean = _BBCODE_RE.sub("", desc)
+        mod_ids: List[str] = []
+        map_folders: List[str] = []
+
+        for m in _MOD_ID_LINE_RE.finditer(clean):
+            raw = m.group(1).strip()
+            for part in re.split(r"[;,/]", raw):
+                tok = part.strip().strip("`\"' ")
+                if tok and " " not in tok and len(tok) <= 64 and tok.lower() not in ("workshop", "id"):
+                    mod_ids.append(tok)
+
+        for m in _MAP_FOLDER_LINE_RE.finditer(clean):
+            raw = m.group(1).strip()
+            for part in re.split(r"[;/]", raw):
+                tok = part.strip().strip("`\"' ")
+                if tok and len(tok) <= 64 and not tok.lower().startswith("http"):
+                    map_folders.append(tok)
+
         return {
-            "mod_ids_raw": workshop,
-            "mods": items,
-            "mods_names_raw": mods_raw,
-            "count": len(items),
+            "mod_ids": _dedup_preserve(mod_ids),
+            "map_folders": _dedup_preserve(map_folders),
         }
 
-    def save_mods(self, mod_ids_raw: str, mods_names_raw: Optional[str] = None) -> Dict[str, Any]:
-        workshop_tokens = [m.strip() for m in re.split(r"[;,]", mod_ids_raw) if m.strip()]
+    async def resolve_workshop_items(
+        self,
+        workshop_ids: List[str],
+        sync_to_ini: bool = False,
+    ) -> Dict[str, Any]:
+        """Consulta la API pública de Steam Workshop y fusiona con mod.info local."""
+        clean_ids = _dedup_preserve([str(w).strip() for w in workshop_ids if str(w).strip().isdigit()])
+        local = self.scan_local_mods()["by_workshop"]
+        catalog = self._load_mods_catalog()
+        resolved: Dict[str, Any] = {}
+
+        if clean_ids:
+            form_data: Dict[str, str] = {"itemcount": str(len(clean_ids))}
+            for idx, wid in enumerate(clean_ids):
+                form_data[f"publishedfileids[{idx}]"] = wid
+
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(
+                        "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/",
+                        data=form_data,
+                    )
+                if resp.status_code == 200:
+                    details = resp.json().get("response", {}).get("publishedfiledetails", [])
+                    for item in details:
+                        wid = str(item.get("publishedfileid", "")).strip()
+                        if not wid:
+                            continue
+                        desc = item.get("description", "") or ""
+                        parsed = self._extract_ids_from_steam_description(desc)
+                        loc = local.get(wid, {})
+                        prev = catalog.get(wid, {})
+                        entry = {
+                            "workshop_id": wid,
+                            "title": item.get("title") or loc.get("title") or prev.get("title") or f"Workshop {wid}",
+                            "preview_url": item.get("preview_url") or prev.get("preview_url") or "",
+                            "file_size": int(item.get("file_size") or 0),
+                            "time_updated": int(item.get("time_updated") or 0),
+                            "mod_ids": loc.get("mod_ids") or parsed["mod_ids"] or prev.get("mod_ids", []),
+                            "map_folders": loc.get("map_folders") or parsed["map_folders"] or prev.get("map_folders", []),
+                            "installed_locally": bool(loc),
+                            "source": "mod.info + steam" if loc else "steam_api",
+                        }
+                        catalog[wid] = entry
+                        resolved[wid] = entry
+            except Exception:
+                pass
+
+        # Fallback para los que no respondieron por Steam (ej. offline) pero sí están en local/catálogo
+        for wid in clean_ids:
+            if wid not in resolved:
+                loc = local.get(wid)
+                prev = catalog.get(wid)
+                if loc:
+                    catalog[wid] = {**(prev or {}), **loc}
+                    resolved[wid] = catalog[wid]
+                elif prev:
+                    resolved[wid] = prev
+
+        self._save_mods_catalog(catalog)
+
+        if sync_to_ini and clean_ids:
+            ini = self.read_ini()
+            existing_mods = [m.strip() for m in re.split(r"[;,]", ini.get("Mods", "")) if m.strip()]
+            # Quitar placeholders numéricos que coincidan con workshop_ids ya resueltos
+            resolved_wids = {wid for wid, info in resolved.items() if info.get("mod_ids")}
+            cleaned_mods = [m for m in existing_mods if m not in resolved_wids]
+            existing_maps = [m.strip() for m in re.split(r"[;]", ini.get("Map", "Muldraugh, KY")) if m.strip()]
+            for wid in clean_ids:
+                info = resolved.get(wid, {})
+                for mid in info.get("mod_ids", []):
+                    if mid not in cleaned_mods:
+                        cleaned_mods.append(mid)
+                for mf in info.get("map_folders", []):
+                    if mf not in existing_maps:
+                        if "Muldraugh, KY" in existing_maps:
+                            existing_maps.insert(existing_maps.index("Muldraugh, KY"), mf)
+                        else:
+                            existing_maps.insert(0, mf)
+            self.set_ini_values({"Mods": ";".join(cleaned_mods), "Map": ";".join(existing_maps or ["Muldraugh, KY"])})
+            self.sync_spawnregions(existing_maps)
+
+        return {"success": True, "resolved": resolved, "count": len(resolved)}
+
+    async def resolve_workshop_collection(self, collection_input: str) -> Dict[str, Any]:
+        """Importa todos los mods de una Colección pública de Steam Workshop."""
+        raw = str(collection_input or "").strip()
+        m_url = re.search(r"[?&]id=(\d+)", raw)
+        m_num = re.search(r"(\d+)", raw)
+        clean_cid = m_url.group(1) if m_url else (m_num.group(1) if m_num else "")
+        if not clean_cid:
+            return {"success": False, "error": "ID o URL de colección no válido."}
+
+        child_ids: List[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1/",
+                    data={"collectioncount": "1", "publishedfileids[0]": clean_cid},
+                )
+            if resp.status_code != 200:
+                return {"success": False, "error": f"Steam API devolvió HTTP {resp.status_code}."}
+            details = resp.json().get("response", {}).get("collectiondetails", [])
+            if not details or details[0].get("result") != 1:
+                return {"success": False, "error": "Colección no encontrada o privada en Steam Workshop."}
+            for child in details[0].get("children", []):
+                cid = str(child.get("publishedfileid", "")).strip()
+                if cid.isdigit():
+                    child_ids.append(cid)
+        except Exception as e:
+            return {"success": False, "error": f"Error consultando Steam Workshop: {e}"}
+
+        child_ids = _dedup_preserve(child_ids)
+        if not child_ids:
+            return {"success": False, "error": "La colección no contiene elementos de Workshop."}
+
+        res_items = await self.resolve_workshop_items(child_ids, sync_to_ini=False)
+        resolved = res_items.get("resolved", {})
+
+        current = self.get_mods()
+        merged_workshop = _dedup_preserve(current["workshop_items"] + child_ids)
+        merged_mod_ids = list(current["mod_ids"])
+        merged_maps = list(current["map_folders"] or ["Muldraugh, KY"])
+
+        for wid in child_ids:
+            info = resolved.get(wid, {})
+            for mid in info.get("mod_ids", []):
+                if mid not in merged_mod_ids:
+                    merged_mod_ids.append(mid)
+            for mf in info.get("map_folders", []):
+                if mf not in merged_maps:
+                    if "Muldraugh, KY" in merged_maps:
+                        merged_maps.insert(merged_maps.index("Muldraugh, KY"), mf)
+                    else:
+                        merged_maps.insert(0, mf)
+
+        self.save_mods(
+            ";".join(merged_workshop),
+            mods_names_raw=";".join(merged_mod_ids),
+            map_raw=";".join(merged_maps),
+        )
+        activity_manager.log(
+            "Mods",
+            f"Colección Steam #{clean_cid} importada ({len(child_ids)} ítems)",
+            action="mods_collection_import",
+        )
+        return {
+            "success": True,
+            "collection_id": clean_cid,
+            "imported_count": len(child_ids),
+            "workshop_items": merged_workshop,
+            "mod_ids": merged_mod_ids,
+            "map_folders": merged_maps,
+        }
+
+    def get_mods(self) -> Dict[str, Any]:
+        ini = self.read_ini()
+        workshop_raw = ini.get("WorkshopItems", "")
+        mods_raw = ini.get("Mods", "")
+        map_raw = ini.get("Map", "Muldraugh, KY")
+
+        workshop_items = _dedup_preserve([m.strip() for m in re.split(r"[;,]", workshop_raw) if m.strip()])
+        mod_ids = _dedup_preserve([m.strip() for m in re.split(r"[;,]", mods_raw) if m.strip()])
+        map_folders = _dedup_preserve([m.strip() for m in re.split(r"[;]", map_raw) if m.strip()])
+
+        local_scan = self.scan_local_mods()
+        catalog = self._load_mods_catalog()
+        mod_ids_set = set(mod_ids)
+
+        catalog_entries: List[Dict[str, Any]] = []
+        accounted_mod_ids = set()
+        for wid in workshop_items:
+            info = catalog.get(wid) or local_scan["by_workshop"].get(wid) or {}
+            known_mids = list(info.get("mod_ids") or [])
+            active_mids = [m for m in known_mids if m in mod_ids_set]
+            accounted_mod_ids.update(active_mids)
+            catalog_entries.append({
+                "workshop_id": wid,
+                "title": info.get("title") or f"Workshop #{wid}",
+                "mod_ids": known_mids,
+                "active_mod_ids": active_mids,
+                "map_folders": list(info.get("map_folders") or []),
+                "preview_url": info.get("preview_url") or "",
+                "installed_locally": bool(local_scan["by_workshop"].get(wid)),
+                "source": info.get("source") or "manual",
+            })
+
+        standalone_mods = [m for m in mod_ids if m not in accounted_mod_ids]
+
+        return {
+            "steam_mode": settings.use_steam,
+            "workshop_items": workshop_items,
+            "workshop_items_raw": ";".join(workshop_items),
+            "mod_ids": mod_ids,
+            "mods_names_raw": ";".join(mod_ids),
+            "map_folders": map_folders,
+            "map_raw": ";".join(map_folders),
+            "mod_ids_raw": ";".join(workshop_items),
+            "mods": workshop_items,
+            "count": len(workshop_items) if workshop_items else len(mod_ids),
+            "catalog": catalog_entries,
+            "standalone_mods": standalone_mods,
+            "local_mods": list(local_scan["by_mod_id"].values()),
+        }
+
+    def save_mods(
+        self,
+        workshop_items_raw: str,
+        mods_names_raw: Optional[str] = None,
+        map_raw: Optional[str] = None,
+        catalog_hints: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Guarda WorkshopItems= y Mods= manteniéndolos correctamente separados."""
+        ini = self.read_ini()
+        old_workshop = _dedup_preserve([m.strip() for m in re.split(r"[;,]", ini.get("WorkshopItems", "")) if m.strip()])
+        old_mods = _dedup_preserve([m.strip() for m in re.split(r"[;,]", ini.get("Mods", "")) if m.strip()])
+
+        workshop_tokens = _dedup_preserve([m.strip() for m in re.split(r"[;,]", workshop_items_raw or "") if m.strip()])
         clean_workshop = ";".join(workshop_tokens)
 
-        updates = {"WorkshopItems": clean_workshop}
+        catalog = self._load_mods_catalog()
+        if catalog_hints:
+            for wid, hint in catalog_hints.items():
+                if not wid or not isinstance(hint, dict):
+                    continue
+                prev = catalog.get(wid, {})
+                merged_mids = _dedup_preserve([str(x) for x in (hint.get("mod_ids") or []) if str(x).strip()])
+                merged_maps = _dedup_preserve([str(x) for x in (hint.get("map_folders") or []) if str(x).strip()])
+                catalog[wid] = {
+                    **prev,
+                    "workshop_id": wid,
+                    "title": hint.get("title") or prev.get("title") or f"Workshop #{wid}",
+                    "mod_ids": merged_mids or prev.get("mod_ids", []),
+                    "map_folders": merged_maps or prev.get("map_folders", []),
+                    "preview_url": hint.get("preview_url") or prev.get("preview_url", ""),
+                    "source": hint.get("source") or prev.get("source") or "manual",
+                }
+            self._save_mods_catalog(catalog)
+
         if mods_names_raw is not None:
-            mod_tokens = [m.strip() for m in re.split(r"[;,]", mods_names_raw) if m.strip()]
-            updates["Mods"] = ";".join(mod_tokens)
+            mod_tokens = _dedup_preserve([m.strip() for m in re.split(r"[;,]", mods_names_raw) if m.strip()])
         else:
-            updates["Mods"] = clean_workshop
+            removed_wids = set(old_workshop) - set(workshop_tokens)
+            removed_mids = set(removed_wids)
+            for rwid in removed_wids:
+                for mid in catalog.get(rwid, {}).get("mod_ids", []):
+                    removed_mids.add(mid)
+
+            mod_tokens = [m for m in old_mods if m not in removed_mids]
+            for wid in workshop_tokens:
+                for mid in catalog.get(wid, {}).get("mod_ids", []):
+                    if mid not in mod_tokens:
+                        mod_tokens.append(mid)
+
+        clean_mods = ";".join(mod_tokens)
+        updates: Dict[str, str] = {
+            "WorkshopItems": clean_workshop,
+            "Mods": clean_mods,
+        }
+        if map_raw is not None:
+            map_tokens = _dedup_preserve([m.strip() for m in re.split(r"[;]", map_raw) if m.strip()])
+            updates["Map"] = ";".join(map_tokens) if map_tokens else "Muldraugh, KY"
 
         ok = self.set_ini_values(updates)
         if ok:
-            activity_manager.log("Mods", f"Lista de mods actualizada ({len(workshop_tokens)} items)")
-        return {"success": ok, "mod_ids": clean_workshop, "count": len(workshop_tokens)}
+            if map_raw is not None:
+                self.sync_spawnregions(map_tokens)
+            activity_manager.log(
+                "Mods",
+                f"Mods actualizados: {len(workshop_tokens)} WorkshopItems / {len(mod_tokens)} ModIDs",
+            )
+        return {
+            "success": ok,
+            "workshop_items": clean_workshop,
+            "mod_ids": clean_mods,
+            "count": len(workshop_tokens) if workshop_tokens else len(mod_tokens),
+        }
 
     # ------------------------------------------------------------- Resumen Completo
     def get_all_settings(self) -> Dict[str, Any]:
         return {
             "server_name": settings.server_name,
+            "profiles": self.list_profiles(),
             "server": self.read_ini(),
             "sandbox": self.read_sandbox(),
             "panel": {
@@ -718,9 +1206,12 @@ class PzSettingsManager:
                 "additional_args": settings.additional_args,
                 "server_port": settings.server_port,
                 "direct_port": settings.direct_port,
+                "rcon_port": settings.rcon_port,
+                "disk_limit_gb": settings.disk_limit_gb,
             },
             "raw_ini": self.get_raw_ini(),
             "raw_sandbox": self.get_raw_sandbox(),
+            "raw_spawnregions": self.get_raw_spawnregions(),
         }
 
     def save_settings(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -728,12 +1219,18 @@ class PzSettingsManager:
         sandbox_vals = payload.get("sandbox") or {}
         panel_vals = payload.get("panel") or {}
 
-        # 1. Guardar variables de runtime/panel
+        panel_updates: Dict[str, Any] = {}
         if panel_vals:
-            panel_updates = {}
-            if "memory_min" in panel_vals:
+            if "server_name" in panel_vals and str(panel_vals["server_name"] or "").strip():
+                clean_sname = "".join(
+                    c for c in str(panel_vals["server_name"]).strip()
+                    if c.isalnum() or c in ("_", "-")
+                )
+                if clean_sname:
+                    panel_updates["server_name"] = clean_sname
+            if "memory_min" in panel_vals and str(panel_vals["memory_min"]).strip():
                 panel_updates["memory_min"] = str(panel_vals["memory_min"]).strip()
-            if "memory_max" in panel_vals:
+            if "memory_max" in panel_vals and str(panel_vals["memory_max"]).strip():
                 panel_updates["memory_max"] = str(panel_vals["memory_max"]).strip()
             if "use_steam" in panel_vals:
                 panel_updates["use_steam"] = str(panel_vals["use_steam"]).lower() in ("true", "1", "yes", "on")
@@ -745,15 +1242,49 @@ class PzSettingsManager:
                 panel_updates["branch"] = str(panel_vals["branch"]).strip()
             if "additional_args" in panel_vals:
                 panel_updates["additional_args"] = str(panel_vals["additional_args"]).strip()
-            if panel_updates:
-                settings.save_runtime_config(panel_updates)
+            if "disk_limit_gb" in panel_vals:
+                try:
+                    panel_updates["disk_limit_gb"] = max(0.0, float(panel_vals["disk_limit_gb"] or 0))
+                except (TypeError, ValueError):
+                    pass
 
-        # 2. Guardar variables en .ini
+        # Sincronizar campos clave del .ini al runtime_config para el banner/panel
+        if server_vals:
+            if "MaxPlayers" in server_vals:
+                try:
+                    panel_updates["max_players"] = max(1, int(server_vals["MaxPlayers"]))
+                except (TypeError, ValueError):
+                    pass
+            if "DefaultPort" in server_vals:
+                try:
+                    panel_updates["server_port"] = int(server_vals["DefaultPort"])
+                except (TypeError, ValueError):
+                    pass
+            if "UDPPort" in server_vals:
+                try:
+                    panel_updates["direct_port"] = int(server_vals["UDPPort"])
+                except (TypeError, ValueError):
+                    pass
+            if "RCONPort" in server_vals:
+                try:
+                    panel_updates["rcon_port"] = int(server_vals["RCONPort"])
+                except (TypeError, ValueError):
+                    pass
+            if "RCONPassword" in server_vals:
+                panel_updates["rcon_password"] = str(server_vals["RCONPassword"])
+
+        if panel_updates:
+            settings.save_runtime_config(panel_updates)
+
+        if not settings.use_steam:
+            server_vals = dict(server_vals)
+            server_vals["WorkshopItems"] = ""
+            server_vals["Mods"] = ""
+
         ini_ok = True
         if server_vals:
             ini_ok = self.set_ini_values(server_vals)
 
-        # 3. Guardar variables en SandboxVars.lua
         sandbox_ok = True
         if sandbox_vals:
             sandbox_ok = self.save_sandbox(sandbox_vals)

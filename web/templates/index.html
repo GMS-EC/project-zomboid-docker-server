@@ -3,64 +3,82 @@
 {% block title %}PZ Server Manager — Panel para Project Zomboid Dedicated Server{% endblock %}
 
 {% block content %}
-  <!-- Top Navigation Header (Dockraft Layout) -->
-  {% include "components/header.html" %}
+  <div class="app-shell">
+    <!-- Top / Sidebar Navigation Header (Dockraft Workbench) -->
+    {% include "components/header.html" %}
 
-  <!-- Server Overview & Metrics Banner (Dockraft Layout) -->
-  {% include "components/banner.html" %}
+    <div class="app-workspace">
+      <!-- Server Overview & Metrics Banner -->
+      {% include "components/banner.html" %}
 
-  <!-- Main Tabs View Container -->
-  <main class="main-container">
-    <!-- Tab 0: Asistente Inicial & Instalador -->
-    <section id="tab-installer" class="tab-pane {% if not is_setup_done %}active{% endif %}">
-      {% include "tabs/installer.html" %}
-    </section>
+      <!-- Main Tabs View Container -->
+      <main class="main-container">
+        <!-- Tab 0: Asistente Inicial & Instalador -->
+        <section id="tab-installer" class="tab-pane {% if not is_setup_done or not is_installed %}active{% endif %}" data-needs-setup="{{ 'true' if (not is_setup_done or not is_installed) else 'false' }}">
+          {% include "tabs/installer.html" %}
+        </section>
 
-    <!-- Tab 1: Consola -->
-    <section id="tab-console" class="tab-pane {% if is_setup_done %}active{% endif %}">
-      {% include "tabs/console.html" %}
-    </section>
+        <!-- Tab 1: Consola -->
+        <section id="tab-console" class="tab-pane {% if is_setup_done and is_installed %}active{% endif %}">
+          {% include "tabs/console.html" %}
+        </section>
 
-    <!-- Tab 2: Métricas de Recursos -->
-    <section id="tab-metrics" class="tab-pane">
-      {% include "tabs/metrics.html" %}
-    </section>
+        <!-- Tab 2: Métricas de Recursos -->
+        <section id="tab-metrics" class="tab-pane">
+          {% include "tabs/metrics.html" %}
+        </section>
 
-    <!-- Tab 3: Jugadores -->
-    <section id="tab-players" class="tab-pane">
-      {% include "tabs/players.html" %}
-    </section>
+        <!-- Tab 3: Jugadores -->
+        <section id="tab-players" class="tab-pane">
+          {% include "tabs/players.html" %}
+        </section>
 
-    <!-- Tab 4: Programar Tareas -->
-    <section id="tab-tasks" class="tab-pane">
-      {% include "tabs/tasks.html" %}
-    </section>
+        <!-- Tab 4: Mods -->
+        <section id="tab-mods" class="tab-pane">
+          {% include "tabs/mods.html" %}
+        </section>
 
-    <!-- Tab 5: Respaldos -->
-    <section id="tab-backups" class="tab-pane">
-      {% include "tabs/backups.html" %}
-    </section>
+        <!-- Tab 5: Gestor de Archivos -->
+        {% include "tabs/files.html" %}
 
-    <!-- Tab 6: Webhooks -->
-    <section id="tab-webhooks" class="tab-pane">
-      {% include "tabs/webhooks.html" %}
-    </section>
+        <!-- Tab 6: Programar Tareas -->
+        <section id="tab-tasks" class="tab-pane">
+          {% include "tabs/tasks.html" %}
+        </section>
 
-    <!-- Tab 7: Configuración -->
-    <section id="tab-settings" class="tab-pane">
-      {% include "tabs/settings.html" %}
-    </section>
+        <!-- Tab 7: Respaldos -->
+        <section id="tab-backups" class="tab-pane">
+          {% include "tabs/backups.html" %}
+        </section>
 
-    <!-- Tab 9: Mods -->
-    <section id="tab-mods" class="tab-pane">
-      {% include "tabs/mods.html" %}
-    </section>
-  </main>
+        <!-- Tab 8: Registros y Auditoría -->
+        {% include "tabs/logs.html" %}
 
-  <!-- Panel Footer (Dockraft Layout) -->
-  {% include "footer.html" %}
+        <!-- Tab 9: Webhooks -->
+        <section id="tab-webhooks" class="tab-pane">
+          {% include "tabs/webhooks.html" %}
+        </section>
+
+        <!-- Tab 10: Configuración -->
+        <section id="tab-settings" class="tab-pane">
+          {% include "tabs/settings.html" %}
+        </section>
+      </main>
+
+      <!-- Panel Footer -->
+      {% include "footer.html" %}
+    </div>
+  </div>
+
+  <!-- Modales del Panel -->
+  {% include "components/modals.html" %}
 {% endblock %}
 
 {% block scripts %}
-  <script src="/static/js/app.js?v=0.2.0"></script>
+  <script src="/static/js/app.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/files.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/logs.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/tasks.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/backups.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/webhooks.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
 {% endblock %}

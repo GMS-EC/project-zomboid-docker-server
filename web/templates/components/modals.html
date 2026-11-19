@@ -1,0 +1,558 @@
+<!-- Modal: Editor de Código Integrado (Archivos .ini, .lua, .txt, .json) -->
+<div class="modal-backdrop" id="file-editor-modal">
+  <div class="modal-box" style="max-width: 840px; width: 95%;">
+    <div class="modal-header">
+      <h3 id="editor-file-title" style="font-family: var(--font-mono); font-size: 1rem;">Editar Archivo</h3>
+      <button class="action-icon-btn" onclick="Files.closeEditor()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="padding-bottom: 4px;">
+      <textarea class="code-editor-area" id="editor-textarea" spellcheck="false" style="border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0;"></textarea>
+      <div id="editor-status-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); background: var(--bg-main); border: 1px solid var(--border-color); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md);">
+        <span id="editor-cursor-pos">Línea 1, Columna 1</span>
+        <span id="editor-char-count">0 caracteres</span>
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 0.75rem; color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px;">
+        <kbd style="background: var(--bg-subtle); padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.7rem;">Tab</kbd> Indentar (2 esp)
+        <span>•</span>
+        <kbd style="background: var(--bg-subtle); padding: 2px 5px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.7rem;">Ctrl+S</kbd> Guardar
+      </span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-outline" onclick="Files.closeEditor()">Cancelar</button>
+        <button id="btn-editor-save" class="btn btn-primary" onclick="Files.saveCurrentFile()" style="display: inline-flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span>Guardar (Ctrl+S)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Diagnóstico Inteligente del Servidor PZ -->
+<div class="modal-backdrop" id="modal-diagnostics">
+  <div class="modal-box" style="max-width: 620px;">
+    <div class="modal-header">
+      <h3 style="display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Diagnóstico Inteligente de Project Zomboid</span>
+      </h3>
+      <button class="action-icon-btn" onclick="document.getElementById('modal-diagnostics').classList.remove('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="diagnostics-modal-body" style="font-size: 0.88rem; line-height: 1.55;">
+      Analizando console.txt y registros del proceso...
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="document.getElementById('modal-diagnostics').classList.remove('open')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear Copia de Seguridad -->
+<div class="modal-backdrop" id="modal-create-backup">
+  <div class="modal-box" style="max-width: 600px;">
+    <div class="modal-header">
+      <h3 style="display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span>Crear Copia de Seguridad</span>
+      </h3>
+      <button class="action-icon-btn" onclick="Backups.closeCreateModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
+      <div class="form-group">
+        <label class="form-label">¿Qué deseas respaldar?</label>
+        <div class="backup-scope-grid">
+          <div class="backup-scope-card selected" data-scope="full" onclick="Backups.selectScope('full')">
+            <div class="backup-scope-title">Servidor Completo</div>
+            <div class="backup-scope-desc">Saves, Server (.ini/.lua) y bases de datos (.db).</div>
+          </div>
+          <div class="backup-scope-card" data-scope="world" onclick="Backups.selectScope('world')">
+            <div class="backup-scope-title">Solo Mundo</div>
+            <div class="backup-scope-desc">Carpeta Saves/Multiplayer del servidor actual.</div>
+          </div>
+          <div class="backup-scope-card" data-scope="config" onclick="Backups.selectScope('config')">
+            <div class="backup-scope-title">Config y DB</div>
+            <div class="backup-scope-desc">Server/*.ini, SandboxVars, Lua y players.db.</div>
+          </div>
+          <div class="backup-scope-card" data-scope="custom" onclick="Backups.selectScope('custom')">
+            <div class="backup-scope-title">Personalizado</div>
+            <div class="backup-scope-desc">Selecciona carpetas o archivos puntuales.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="backup-custom-targets-box" style="display: none; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label class="form-label" style="margin: 0;">Elementos a incluir</label>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 0.72rem;" onclick="Backups.toggleAllTargets(true)">Marcar todos</button>
+            <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 0.72rem;" onclick="Backups.toggleAllTargets(false)">Limpiar</button>
+          </div>
+        </div>
+        <div id="backup-targets-list" class="backup-targets-list"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="backup-modal-tag">Etiqueta / Nombre (opcional)</label>
+        <input type="text" class="form-input" id="backup-modal-tag" placeholder="ej: antes_de_louisville (por defecto: manual)">
+      </div>
+
+      <div class="backup-params-grid">
+        <div class="backup-param-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <span class="backup-param-label">Comprimir archivo (Gzip)</span>
+            <label class="toggle-wrapper">
+              <input type="checkbox" id="backup-modal-compression" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="backup-param-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <span class="backup-param-label">Detener servidor antes</span>
+            <label class="toggle-wrapper">
+              <input type="checkbox" id="backup-modal-stop">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="gap: 12px; margin-top: 12px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="backup-modal-pre-cmd">Comando previo (opcional)</label>
+          <input type="text" id="backup-modal-pre-cmd" class="form-input" placeholder='ej: servermsg "Respaldo..."'>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="backup-modal-post-cmd">Comando posterior (opcional)</label>
+          <input type="text" id="backup-modal-post-cmd" class="form-input" placeholder='ej: servermsg "Listo"'>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Backups.closeCreateModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-modal-submit-backup" onclick="Backups.submitCreateBackup()">Crear Copia Ahora</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Política de Respaldo -->
+<div class="modal-backdrop" id="modal-backup-config">
+  <div class="modal-box" style="max-width: 580px;">
+    <div class="modal-header">
+      <h3 style="display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a371f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span id="backup-policy-modal-title">Política de Respaldo</span>
+      </h3>
+      <button class="action-icon-btn" onclick="Backups.closeConfigModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body" style="max-height: 72vh; overflow-y: auto;">
+      <input type="hidden" id="backup-policy-id">
+
+      <div class="form-group">
+        <label class="form-label" for="backup-policy-name">Nombre de la política</label>
+        <input type="text" id="backup-policy-name" class="form-input" placeholder="ej: Respaldo Diario Solo Mundo">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Alcance</label>
+        <div class="backup-scope-grid">
+          <div class="backup-scope-card backup-cfg-scope-card selected" data-scope="full" onclick="Backups.selectConfigScope('full')">
+            <div class="backup-scope-title">Servidor Completo</div>
+            <div class="backup-scope-desc">Saves, configuración y DB.</div>
+          </div>
+          <div class="backup-scope-card backup-cfg-scope-card" data-scope="world" onclick="Backups.selectConfigScope('world')">
+            <div class="backup-scope-title">Solo Mundo</div>
+            <div class="backup-scope-desc">Saves/Multiplayer actual.</div>
+          </div>
+          <div class="backup-scope-card backup-cfg-scope-card" data-scope="config" onclick="Backups.selectConfigScope('config')">
+            <div class="backup-scope-title">Config y DB</div>
+            <div class="backup-scope-desc">.ini, Lua y players.db.</div>
+          </div>
+          <div class="backup-scope-card backup-cfg-scope-card" data-scope="custom" onclick="Backups.selectConfigScope('custom')">
+            <div class="backup-scope-title">Personalizado</div>
+            <div class="backup-scope-desc">Selección manual.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="backup-cfg-custom-targets-box" style="display: none; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label class="form-label" style="margin: 0;">Elementos a respaldar</label>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 0.72rem;" onclick="Backups.toggleAllConfigTargets(true)">Marcar todos</button>
+            <button type="button" class="btn btn-outline" style="padding: 3px 8px; font-size: 0.72rem;" onclick="Backups.toggleAllConfigTargets(false)">Limpiar</button>
+          </div>
+        </div>
+        <div id="backup-cfg-targets-list" class="backup-targets-list"></div>
+      </div>
+
+      <div class="backup-params-grid">
+        <div class="backup-param-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <span class="backup-param-label">Comprimir archivo (Gzip)</span>
+            <label class="toggle-wrapper">
+              <input type="checkbox" id="backup-config-compression" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="backup-param-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <span class="backup-param-label">Detener servidor antes</span>
+            <label class="toggle-wrapper">
+              <input type="checkbox" id="backup-config-stop">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="gap: 12px; margin-top: 12px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="backup-config-pre-cmd">Comando previo</label>
+          <input type="text" id="backup-config-pre-cmd" class="form-input" placeholder='ej: servermsg "Respaldo..."'>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="backup-config-post-cmd">Comando posterior</label>
+          <input type="text" id="backup-config-post-cmd" class="form-input" placeholder='ej: servermsg "Completado"'>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer" style="justify-content: space-between;">
+      <button class="btn btn-danger" id="btn-delete-policy-modal" style="display: none;" onclick="Backups.deleteCurrentPolicy()">Eliminar Política</button>
+      <div style="display: flex; gap: 8px; margin-left: auto;">
+        <button class="btn btn-outline" onclick="Backups.closeConfigModal()">Cancelar</button>
+        <button class="btn btn-purple" onclick="Backups.saveBackupConfig()">Guardar Política</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Rotación / Límite Global de Copias -->
+<div class="modal-backdrop" id="modal-backup-retention">
+  <div class="modal-box" style="max-width: 420px;">
+    <div class="modal-header">
+      <h3 style="display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+        <span>Límite Global de Copias</span>
+      </h3>
+      <button class="action-icon-btn" onclick="Backups.closeRetentionModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label" for="backup-retention-max">Máximo de archivos a conservar (1 – 100)</label>
+        <input type="number" id="backup-retention-max" class="form-input" min="1" max="100" value="10">
+        <span class="field-hint">Las copias automáticas más antiguas se eliminarán al superar este límite.</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Backups.closeRetentionModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="Backups.saveRetentionMax()">Guardar Límite</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear Usuario / Whitelist PZ -->
+<div class="modal-backdrop" id="modal-add-player">
+  <div class="modal-box" style="max-width: 440px;">
+    <div class="modal-header">
+      <h3>Crear Usuario / Cuenta PZ</h3>
+      <button class="action-icon-btn" onclick="document.getElementById('modal-add-player').classList.remove('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="add-player-username">Nombre de usuario</label>
+        <input type="text" class="form-input" id="add-player-username" placeholder="ej: survivor01">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="add-player-password">Contraseña</label>
+        <input type="password" class="form-input" id="add-player-password" placeholder="Contraseña inicial">
+      </div>
+      <div class="form-group" style="margin-bottom: 0;">
+        <label class="form-label" for="add-player-role">Rol / AccessLevel</label>
+        <select class="form-select" id="add-player-role">
+          <option value="none" selected>Usuario estándar (none)</option>
+          <option value="observer">Observer</option>
+          <option value="gm">Game Master (gm)</option>
+          <option value="overseer">Overseer</option>
+          <option value="moderator">Moderador (moderator)</option>
+          <option value="admin">Administrador (admin)</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modal-add-player').classList.remove('open')">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitAddPlayer()">Crear Usuario</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Crear / Editar Tarea Programada -->
+<div class="modal-backdrop" id="task-modal">
+  <div class="modal-box" style="max-width: 540px;">
+    <div class="modal-header">
+      <h3 id="task-modal-title">Crear Nueva Tarea Programada</h3>
+      <button class="action-icon-btn" onclick="Tasks.closeModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <input type="hidden" id="task-edit-id" value="">
+
+      <div class="form-group">
+        <label class="form-label" for="task-name-input">Nombre descriptivo</label>
+        <input type="text" id="task-name-input" class="form-input" placeholder="Ej: Respaldo Nocturno o Anuncio">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="task-action-select">Acción a ejecutar</label>
+        <select id="task-action-select" class="form-select" onchange="Tasks.onActionChange(this.value)">
+          <option value="restart">Reinicio Seguro (save + warn + quit)</option>
+          <option value="backup">Copia de Seguridad</option>
+          <option value="save">Guardar Mundo (save)</option>
+          <option value="start">Iniciar Servidor</option>
+          <option value="stop">Detener Servidor</option>
+          <option value="check_updates">Comprobar Actualizaciones (SteamCMD)</option>
+          <option value="command">Comando de Consola (PZ)</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="task-command-group" style="display: none;">
+        <label class="form-label" for="task-command-input">Comando de consola PZ</label>
+        <input type="text" id="task-command-input" class="form-input" placeholder='Ej: servermsg "El servidor se reinicia en 5m"'>
+      </div>
+
+      <div class="form-group" id="task-backup-policy-group" style="display: none;">
+        <label class="form-label" for="task-backup-policy-select">Política de respaldo a usar</label>
+        <select id="task-backup-policy-select" class="form-select"></select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Tipo de programación</label>
+        <div style="display: flex; gap: 16px; margin-top: 6px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.88rem;">
+            <input type="radio" name="task-schedule-type" value="interval" checked onchange="Tasks.onScheduleTypeChange(this.value)">
+            <span>Por Intervalo</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.88rem;">
+            <input type="radio" name="task-schedule-type" value="cron" onchange="Tasks.onScheduleTypeChange(this.value)">
+            <span>Expresión Cron</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="task-interval-group" style="display: flex; gap: 12px; margin-bottom: 16px;">
+        <div style="flex: 1;">
+          <label class="form-label" for="task-interval-val">Cada</label>
+          <input type="number" id="task-interval-val" class="form-input" min="1" value="1">
+        </div>
+        <div style="flex: 1;">
+          <label class="form-label" for="task-interval-unit">Unidad</label>
+          <select id="task-interval-unit" class="form-select">
+            <option value="minutes">Minutos</option>
+            <option value="hours">Horas</option>
+            <option value="days" selected>Días</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="task-cron-group" style="display: none; margin-bottom: 16px;">
+        <label class="form-label" for="task-cron-input">Expresión Cron (min hora día mes sem)</label>
+        <input type="text" id="task-cron-input" class="form-input" placeholder="0 4 * * *" value="0 4 * * *">
+        <div class="cron-presets">
+          <button type="button" class="cron-preset-btn" onclick="Tasks.applyCronPreset('0 * * * *')">Cada hora</button>
+          <button type="button" class="cron-preset-btn" onclick="Tasks.applyCronPreset('0 4 * * *')">Diario 04:00</button>
+          <button type="button" class="cron-preset-btn" onclick="Tasks.applyCronPreset('0 */6 * * *')">Cada 6h</button>
+          <button type="button" class="cron-preset-btn" onclick="Tasks.applyCronPreset('0 4 * * 0')">Semanal Dom</button>
+        </div>
+      </div>
+
+      <div class="form-group" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0;">
+        <label class="form-label" style="margin: 0;" for="task-enabled-input">Activar tarea al guardar</label>
+        <label class="toggle-wrapper">
+          <input type="checkbox" id="task-enabled-input" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Tasks.closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="Tasks.saveTask()">Guardar Tarea</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Acciones Administrativas In-Game por Jugador -->
+<div class="modal-backdrop" id="modal-player-actions">
+  <div class="modal-box" style="max-width: 560px;">
+    <div class="modal-header">
+      <h3 id="pa-target-title">Acciones In-Game</h3>
+      <button class="action-icon-btn" onclick="document.getElementById('modal-player-actions').classList.remove('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+      <input type="hidden" id="pa-target-username">
+
+      <!-- Estados de Admin -->
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;">
+        <button type="button" class="btn btn-success btn-sm" onclick="submitPlayerAction('godmode_on')">Godmode ON</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="submitPlayerAction('godmode_off')">Godmode OFF</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="submitPlayerAction('invisible_on')">Invisibilidad ON</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="submitPlayerAction('invisible_off')">Invisibilidad OFF</button>
+      </div>
+
+      <!-- Entregar Ítem -->
+      <div style="padding: 12px; background: var(--bg-subtle); border: 1px solid var(--border-color); border-radius: 6px;">
+        <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 8px; color: #7ee2b4;">Entregar Ítem (additem)</div>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <input type="text" id="pa-item-code" class="form-input" placeholder="Código (ej: Base.Axe)" style="flex: 1;">
+          <input type="number" id="pa-item-qty" class="form-input" min="1" max="500" value="1" style="width: 78px;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="submitPlayerAction('additem')">Entregar</button>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button type="button" class="chip-btn" onclick="document.getElementById('pa-item-code').value='Base.Axe'">Hacha</button>
+          <button type="button" class="chip-btn" onclick="document.getElementById('pa-item-code').value='Base.Crowbar'">Palanca</button>
+          <button type="button" class="chip-btn" onclick="document.getElementById('pa-item-code').value='Base.Sledgehammer'">Almádena</button>
+          <button type="button" class="chip-btn" onclick="document.getElementById('pa-item-code').value='Base.Bag_BigHikingBag'">Mochila Grande</button>
+          <button type="button" class="chip-btn" onclick="document.getElementById('pa-item-code').value='Base.FirstAidKit'">Botiquín</button>
+        </div>
+      </div>
+
+      <!-- Spawnear Vehículo y Teletransporte -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;">
+        <div style="padding: 12px; background: var(--bg-subtle); border: 1px solid var(--border-color); border-radius: 6px;">
+          <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 6px; color: #79c0ff;">Spawnear Vehículo</div>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" id="pa-vehicle-code" class="form-input" value="Base.CarNormal" placeholder="Base.CarNormal" style="flex: 1;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="submitPlayerAction('addvehicle')">Spawn</button>
+          </div>
+        </div>
+        <div style="padding: 12px; background: var(--bg-subtle); border: 1px solid var(--border-color); border-radius: 6px;">
+          <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 6px; color: #f2cc60;">Teletransportar</div>
+          <div style="display: flex; gap: 6px;">
+            <input type="text" id="pa-teleport-target" class="form-input" placeholder="Jugador o x,y,z" style="flex: 1;">
+            <button type="button" class="btn btn-outline btn-sm" onclick="submitPlayerAction('teleport')">TP</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Otorgar XP -->
+      <div style="padding: 12px; background: var(--bg-subtle); border: 1px solid var(--border-color); border-radius: 6px;">
+        <div style="font-size: 0.82rem; font-weight: 600; margin-bottom: 6px; color: #d2a8ff;">Otorgar Experiencia (addxp)</div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="pa-xp-perk" class="form-input" value="Carpentry" placeholder="Carpentry, Mechanics, Aiming..." style="flex: 1;">
+          <input type="number" id="pa-xp-amount" class="form-input" min="1" value="500" style="width: 100px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="submitPlayerAction('addxp')">Dar XP</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-player-actions').classList.remove('open')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Configuración de Canal de Webhook -->
+<div class="modal-backdrop" id="webhook-config-modal" style="z-index: 1050;">
+  <div class="modal-box" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 id="webhook-modal-title" style="display: flex; align-items: center; gap: 8px;">Configurar Webhook</h3>
+      <button class="action-icon-btn" onclick="Webhooks.closeModal()" aria-label="Cerrar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-section-discord" style="display: none;">
+        <div class="form-group">
+          <label class="form-label" for="webhook-discord-url">Webhook URL</label>
+          <input type="url" class="form-input" id="webhook-discord-url" placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="webhook-lang">Idioma de Notificaciones</label>
+          <select id="webhook-lang" class="form-select">
+            <option value="es">Español (es)</option>
+            <option value="en">English (en)</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="modal-section-telegram" style="display: none;">
+        <div class="form-group">
+          <label class="form-label" for="webhook-telegram-token">Bot Token (@BotFather)</label>
+          <input type="password" class="form-input" id="webhook-telegram-token" placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="webhook-telegram-chatid">Chat ID / Grupo ID</label>
+          <input type="text" class="form-input" id="webhook-telegram-chatid" placeholder="Ej: 12345678 o -100123456789">
+        </div>
+      </div>
+
+      <div id="modal-section-email" style="display: none;">
+        <div class="grid-2" style="gap: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="webhook-email-host">Servidor SMTP</label>
+            <input type="text" class="form-input" id="webhook-email-host" placeholder="smtp.gmail.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="webhook-email-port">Puerto SMTP</label>
+            <input type="number" class="form-input" id="webhook-email-port" value="587">
+          </div>
+        </div>
+        <div class="grid-2" style="gap: 12px;">
+          <div class="form-group">
+            <label class="form-label" for="webhook-email-user">Usuario / Cuenta</label>
+            <input type="text" class="form-input" id="webhook-email-user" placeholder="tu_cuenta@gmail.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="webhook-email-pass">Contraseña / App Password</label>
+            <input type="password" class="form-input" id="webhook-email-pass" placeholder="••••••••••••">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="webhook-email-from">Remitente (From)</label>
+          <input type="text" class="form-input" id="webhook-email-from" placeholder="PZ Alerts <tu_cuenta@gmail.com>">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="webhook-email-to">Destinatarios (separados por coma)</label>
+          <input type="text" class="form-input" id="webhook-email-to" placeholder="admin@ejemplo.com, alertas@ejemplo.com">
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--bg-subtle); border: 1px solid var(--border-color); border-radius: 6px;">
+          <span style="font-weight: 600; font-size: 0.85rem;">Usar STARTTLS / TLS</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="webhook-email-tls" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+      <button type="button" class="btn btn-outline" id="webhook-modal-test-btn" onclick="Webhooks.testCurrentModalChannel()">Probar Canal</button>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-outline" onclick="Webhooks.closeModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="Webhooks.saveFromModal()">Guardar Ajustes</button>
+      </div>
+    </div>
+  </div>
+</div>

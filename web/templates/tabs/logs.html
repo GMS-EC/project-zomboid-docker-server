@@ -1,0 +1,114 @@
+<!-- TAB: REGISTRO DE AUDITORÍA Y EVENTOS -->
+<section class="tab-pane" id="tab-logs">
+  <div class="grid-4" style="margin-bottom: 20px;">
+    <div class="stat-box">
+      <div class="stat-label">
+        <span>Registros Totales</span>
+        <span id="logs-total-count" style="color: #58a6ff; font-weight: 600;">0 registros</span>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">Historial cronológico auditado (7 días)</div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-label">
+        <span>Comandos Consola</span>
+        <span id="logs-commands-count" style="color: #d2a8ff; font-weight: 600;">0 comandos</span>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">Enviados por administradores</div>
+    </div>
+
+    <div class="stat-box">
+      <div class="stat-label">
+        <span>Eventos del Sistema</span>
+        <span id="logs-system-count" style="color: #7ee787; font-weight: 600;">0 eventos</span>
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-dim); margin-top: 4px;">Inicios, copias, mods y jugadores</div>
+    </div>
+
+    <div class="stat-box" style="justify-content: center;">
+      <div style="display: flex; gap: 8px; width: 100%;">
+        <button class="btn btn-outline" id="btn-export-logs" onclick="Logs.exportLogs('csv')" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Exportar CSV</span>
+        </button>
+        <button class="btn btn-outline" id="btn-clear-logs" onclick="Logs.clearLogs()" style="padding: 6px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-color: #f85149; color: #f85149;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span>Limpiar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Registro de Auditoría y Comandos de Consola</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-muted); cursor: pointer;">
+          <input type="checkbox" id="logs-auto-refresh" checked onchange="Logs.toggleAutoRefresh(this.checked)">
+          <span>Auto-actualizar (5s)</span>
+        </label>
+        <button class="btn btn-outline" onclick="Logs.loadLogs(true)" style="padding: 4px 10px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px;">
+          <span>Actualizar</span>
+        </button>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; background: rgba(22, 27, 34, 0.6); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+      <div class="log-category-chips" style="display: flex; flex-wrap: wrap; gap: 6px;">
+        <button class="chip-btn log-chip active" data-category="all" onclick="Logs.setCategory('all')">Todos</button>
+        <button class="chip-btn log-chip" data-category="console" onclick="Logs.setCategory('console')" style="color: #d2a8ff;">Comandos</button>
+        <button class="chip-btn log-chip" data-category="server" onclick="Logs.setCategory('server')" style="color: #7ee787;">Servidor</button>
+        <button class="chip-btn log-chip" data-category="player" onclick="Logs.setCategory('player')" style="color: #c4b5fd;">Jugadores</button>
+        <button class="chip-btn log-chip" data-category="update" onclick="Logs.setCategory('update')" style="color: #5eead4;">Mods / Updates</button>
+        <button class="chip-btn log-chip" data-category="backup" onclick="Logs.setCategory('backup')" style="color: #79c0ff;">Respaldos</button>
+        <button class="chip-btn log-chip" data-category="tasks" onclick="Logs.setCategory('tasks')" style="color: #f2cc60;">Tareas</button>
+        <button class="chip-btn log-chip" data-category="security" onclick="Logs.setCategory('security')" style="color: #ff7b72;">Seguridad</button>
+      </div>
+
+      <div style="position: relative; min-width: 240px; flex: 1; max-width: 380px;">
+        <input type="text" id="logs-search-input" class="form-input" placeholder="Buscar por comando, acción o detalle..." oninput="Logs.handleSearch(this.value)" style="padding-left: 32px; font-size: 0.83rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-dim); pointer-events: none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+    </div>
+
+    <div id="logs-empty-state" style="display: none; text-align: center; padding: 48px 16px; color: var(--text-dim);">
+      <p style="font-size: 0.95rem; font-weight: 500;">No hay registros que coincidan con la búsqueda.</p>
+      <p style="font-size: 0.82rem; margin-top: 4px;">Los comandos ejecutados en consola y eventos del servidor aparecerán aquí automáticamente.</p>
+    </div>
+
+    <div class="table-responsive">
+      <table class="data-table" id="logs-table" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr>
+            <th style="width: 165px;">Fecha / Hora</th>
+            <th style="width: 130px;">Categoría</th>
+            <th style="width: 160px;">Acción</th>
+            <th>Detalle / Comando</th>
+            <th style="width: 110px;">Usuario</th>
+            <th style="width: 100px; text-align: center;">Estado</th>
+          </tr>
+        </thead>
+        <tbody id="logs-table-body"></tbody>
+      </table>
+    </div>
+
+    <div class="logs-pagination-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-color); font-size: 0.82rem; color: var(--text-dim);">
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <span id="logs-pagination-info">Cargando registros...</span>
+        <div style="display: inline-flex; align-items: center; gap: 6px;">
+          <label for="logs-page-size" style="font-size: 0.78rem; color: var(--text-dim);">Por página:</label>
+          <select id="logs-page-size" class="form-input" style="padding: 3px 8px; font-size: 0.78rem; width: auto;" onchange="Logs.changePageSize(Number(this.value))">
+            <option value="15">15</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+      </div>
+      <div id="logs-pagination-controls" style="display: flex; align-items: center; gap: 4px;"></div>
+    </div>
+  </div>
+</section>

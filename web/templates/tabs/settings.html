@@ -68,10 +68,6 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       <span>Personaje &amp; Rasgos</span>
     </button>
-    <button type="button" class="subnav-btn" onclick="switchSettingsTab('mods', this)">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-      <span>Mods &amp; Workshop</span>
-    </button>
     <button type="button" class="subnav-btn" onclick="switchSettingsTab('engine', this)">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/></svg>
       <span>Motor &amp; RAM</span>
@@ -82,63 +78,68 @@
     </button>
   </div>
 
+  <!-- Barra de Presets Rápidos de Sandbox (Project Zomboid) -->
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 10px 24px; background: rgba(20, 26, 33, 0.7); border-bottom: 1px solid var(--border-color);">
+    <span style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted);">Plantillas Rápidas de Sandbox:</span>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button type="button" class="chip-btn" onclick="applyPreset('apocalypse')">Apocalipsis</button>
+      <button type="button" class="chip-btn" onclick="applyPreset('survivor')">Superviviente</button>
+      <button type="button" class="chip-btn" onclick="applyPreset('builder')">Constructor</button>
+      <button type="button" class="chip-btn" onclick="applyPreset('six_months')">6 Meses Después</button>
+      <button type="button" class="chip-btn" onclick="applyPreset('sprinters')" style="color: #ff7b72; border-color: rgba(248, 81, 73, 0.35);">Corredores Letales</button>
+    </div>
+  </div>
+
   <!-- Contenido de las Secciones -->
   <div style="padding: 24px;">
 
-    <!-- ========================================================================= -->
     <!-- 1. SERVIDOR & ACCESO (.ini) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-server" class="settings-subpane active">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #58a6ff;">Identidad del Servidor, Red &amp; Autenticación</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Controla cómo se presenta el servidor al mundo, el acceso mediante contraseña y las reglas de admisión.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
         <div class="form-group">
           <label class="form-label" for="cfg-PublicName">Nombre Público del Servidor (PublicName)</label>
           <input type="text" id="cfg-PublicName" class="form-input" placeholder="Ej: Mi Servidor Supervivientes">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Nombre visible en el buscador de servidores de Project Zomboid.</small>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-Password">Contraseña de Entrada (Password)</label>
-          <input type="text" id="cfg-Password" class="form-input" placeholder="Vacío = Servidor público sin contraseña">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Los jugadores deben introducir esta clave para conectarse.</small>
+          <input type="text" id="cfg-Password" class="form-input" placeholder="Vacío = sin contraseña">
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-AdminPassword">Contraseña de Administrador In-Game (AdminPassword)</label>
+          <label class="form-label" for="cfg-AdminPassword">Contraseña de Admin In-Game (AdminPassword)</label>
           <input type="text" id="cfg-AdminPassword" class="form-input" placeholder="adminpass">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Contraseña para que tu usuario inicie con rango de admin in-game.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-MaxPlayers">Jugadores Máximos Simultáneos (MaxPlayers)</label>
+          <label class="form-label" for="cfg-MaxPlayers">Jugadores Máximos (MaxPlayers)</label>
           <input type="number" id="cfg-MaxPlayers" class="form-input" min="1" max="100" value="16">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Límite de capacidad. Recomendado 16-32 según la RAM asignada.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-Public">Publicar en el Buscador Oficial (Public)</label>
+          <label class="form-label" for="cfg-Public">Publicar en Buscador Oficial (Public)</label>
           <select id="cfg-Public" class="form-select">
-            <option value="true">Público (Aparece en la lista de servidores)</option>
-            <option value="false" selected>Privado (Solo conexión directa por IP/Puerto)</option>
+            <option value="true">Público</option>
+            <option value="false" selected>Privado (Solo IP/Puerto)</option>
           </select>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-Open">Registro Abierto de Cuentas (Open)</label>
           <select id="cfg-Open" class="form-select">
-            <option value="true" selected>Abierto (Cualquiera puede crear cuenta y entrar)</option>
-            <option value="false">Cerrado (Requiere aprobación previa en Whitelist)</option>
+            <option value="true" selected>Abierto</option>
+            <option value="false">Cerrado (Requiere Whitelist)</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-AutoCreateUserInWhiteList">Añadir Nuevos a Whitelist (AutoCreateUserInWhiteList)</label>
+          <label class="form-label" for="cfg-AutoCreateUserInWhiteList">Auto-Whitelist al Entrar (AutoCreateUserInWhiteList)</label>
           <select id="cfg-AutoCreateUserInWhiteList" class="form-select">
-            <option value="true">Sí (Registra automáticamente a quien entra)</option>
+            <option value="true">Sí</option>
             <option value="false" selected>No</option>
           </select>
         </div>
@@ -146,14 +147,14 @@
         <div class="form-group">
           <label class="form-label" for="cfg-DropOffWhiteListAfter">Días Inactivo para Expulsar de Whitelist</label>
           <input type="number" id="cfg-DropOffWhiteListAfter" class="form-input" value="0">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Nunca expulsa de la lista blanca.</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Nunca expulsa.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-PauseEmpty">Pausar Servidor si está Vacío (PauseEmpty)</label>
+          <label class="form-label" for="cfg-PauseEmpty">Pausar si está Vacío (PauseEmpty)</label>
           <select id="cfg-PauseEmpty" class="form-select">
-            <option value="true" selected>Activado (El tiempo y descomposición se detienen si no hay jugadores)</option>
-            <option value="false">Desactivado (El mundo avanza 24/7)</option>
+            <option value="true" selected>Activado</option>
+            <option value="false">Desactivado (Avanza 24/7)</option>
           </select>
         </div>
 
@@ -163,25 +164,24 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-DenyLoginOnOverloadedServer">Denegar Login si el Servidor está Sobrecargado</label>
+          <label class="form-label" for="cfg-DenyLoginOnOverloadedServer">Denegar Login si Sobrecargado</label>
           <select id="cfg-DenyLoginOnOverloadedServer" class="form-select">
-            <option value="true" selected>Activado (Protege el rendimiento en caídas de FPS)</option>
+            <option value="true" selected>Activado</option>
             <option value="false">Desactivado</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-DoLuaChecksum">Verificar Checksum Lua de Clientes (Anti-Cheat)</label>
+          <label class="form-label" for="cfg-DoLuaChecksum">Verificar Checksum Lua (Anti-Cheat)</label>
           <select id="cfg-DoLuaChecksum" class="form-select">
-            <option value="true" selected>Activado (Impide modificar scripts del cliente)</option>
+            <option value="true" selected>Activado</option>
             <option value="false">Desactivado</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-FastForwardMultiplier">Acelerador de Tiempo al Dormir (FastForward)</label>
+          <label class="form-label" for="cfg-FastForwardMultiplier">Acelerador al Dormir (FastForward)</label>
           <input type="number" step="1" id="cfg-FastForwardMultiplier" class="form-input" value="40">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Multiplicador de velocidad de reloj cuando todos los supervivientes duermen.</small>
         </div>
 
         <div class="form-group">
@@ -216,29 +216,26 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 2. PVP & REFUGIOS (.ini) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-pvp" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #f85149;">Reglas de Combate PvP y Protección de Refugios (Safehouses)</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Define si los jugadores pueden pelear entre sí y cómo funcionan las bases seguras.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
         <div class="form-group">
           <label class="form-label" for="cfg-PVP">Modo Jugador contra Jugador (PVP)</label>
           <select id="cfg-PVP" class="form-select">
-            <option value="true" selected>PvP Activado (Jugadores pueden herirse)</option>
-            <option value="false">PvE Puro (Jugadores no pueden herirse)</option>
+            <option value="true" selected>PvP Activado</option>
+            <option value="false">PvE Puro</option>
           </select>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-SafetySystem">Sistema de Seguridad de Calavera (SafetySystem)</label>
           <select id="cfg-SafetySystem" class="form-select">
-            <option value="true" selected>Activado (Requiere activar el modo hostil para atacar)</option>
-            <option value="false">Desactivado (Ataques libres siempre)</option>
+            <option value="true" selected>Activado (Requiere modo hostil)</option>
+            <option value="false">Desactivado (Ataques libres)</option>
           </select>
         </div>
 
@@ -357,20 +354,17 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 3. SUPERVIVENCIA & RED (.ini) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-survival" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #3fb950;">Mecánicas de Supervivencia, Sueño, Chat &amp; Respawn de Botín</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Opciones de inmersión multijugador, VOIP, regeneración de recursos y protección anti-trampas.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
         <div class="form-group">
           <label class="form-label" for="cfg-SleepAllowed">Permitir Dormir en Servidor (SleepAllowed)</label>
           <select id="cfg-SleepAllowed" class="form-select">
-            <option value="true">Activado (Jugadores pueden acostarse en camas)</option>
+            <option value="true">Activado</option>
             <option value="false" selected>Desactivado (Estándar multijugador)</option>
           </select>
         </div>
@@ -440,9 +434,8 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-SpeedLimit">Límite de Velocidad en Vehículos km/h (SpeedLimit)</label>
+          <label class="form-label" for="cfg-SpeedLimit">Límite de Velocidad km/h (SpeedLimit)</label>
           <input type="number" step="5" id="cfg-SpeedLimit" class="form-input" value="70">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Previene desincronizaciones en el mapa y lag al conducir.</small>
         </div>
 
         <div class="form-group">
@@ -452,9 +445,9 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-HoursForLootRespawn">Horas para Reaparición de Botín (HoursForLootRespawn)</label>
+          <label class="form-label" for="cfg-HoursForLootRespawn">Horas para Reaparición de Botín</label>
           <input type="number" id="cfg-HoursForLootRespawn" class="form-input" value="0">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Botín nunca reaparece. Ej: 168 = Reaparece cada semana real.</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Nunca reaparece (ej: 168 = 1 semana).</small>
         </div>
 
         <div class="form-group">
@@ -465,51 +458,46 @@
         <div class="form-group">
           <label class="form-label" for="cfg-ConstructionPreventsLootRespawn">Construcciones Bloquean Respawn de Botín</label>
           <select id="cfg-ConstructionPreventsLootRespawn" class="form-select">
-            <option value="true" selected>Sí (Si hay base de jugador cerca, no reaparece loot)</option>
+            <option value="true" selected>Sí</option>
             <option value="false">No</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-BloodSplatLifespanDays">Días que Dura la Sangre en Paredes/Suelo</label>
+          <label class="form-label" for="cfg-BloodSplatLifespanDays">Días de Sangre en Paredes/Suelo</label>
           <input type="number" id="cfg-BloodSplatLifespanDays" class="form-input" value="0">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Desaparece con lluvia normal. Mayor valor = persiste más tiempo.</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Desaparece con lluvia normal.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-ItemNumbersLimitPerContainer">Límite de Items por Contenedor (Anti-Lag)</label>
+          <label class="form-label" for="cfg-ItemNumbersLimitPerContainer">Límite de Items por Contenedor</label>
           <input type="number" id="cfg-ItemNumbersLimitPerContainer" class="form-input" value="0">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Sin límite estricto.</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Sin límite.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-Map">Nombre del Mapa de Partida (Map)</label>
+          <label class="form-label" for="cfg-Map">Mapa de Partida (Map)</label>
           <input type="text" id="cfg-Map" class="form-input" value="Muldraugh, KY">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Muldraugh, KY (mapa base) o carpetas de mapas de mods.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-SpawnPoint">Punto de Spawn Inicial x,y,z (SpawnPoint)</label>
+          <label class="form-label" for="cfg-SpawnPoint">Punto de Spawn Inicial x,y,z</label>
           <input type="text" id="cfg-SpawnPoint" class="form-input" value="0,0,0">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">0,0,0 = Puntos aleatorios predeterminados de la ciudad elegida.</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0,0,0 = Aleatorio por ciudad.</small>
         </div>
 
         <div class="form-group" style="grid-column: 1 / -1;">
-          <label class="form-label" for="cfg-SpawnItems">Objetos Entregados al Aparecer (SpawnItems)</label>
+          <label class="form-label" for="cfg-SpawnItems">Objetos Iniciales (SpawnItems)</label>
           <input type="text" id="cfg-SpawnItems" class="form-input" placeholder="ej: Base.Axe,Base.WaterBottleFull,Base.Crisps">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">IDs del juego separados por comas que todo superviviente recibirá al nacer.</small>
         </div>
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 4. ZOMBIS & INFECCIÓN (Sandbox) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-zombies" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div>
           <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #a371f7;">Comportamiento, Fisiología &amp; Infección de Zombis (ZombieLore)</h3>
-          <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Personaliza la letalidad de los no-muertos o aplica presets de dificultad con un clic.</p>
         </div>
         <!-- Presets Rápidos -->
         <div style="display: flex; gap: 6px;">
@@ -681,18 +669,15 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 5. POBLACIÓN & RESPAWN (Sandbox) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-population" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #d29922;">Población de Zombis, Curva de Dificultad &amp; Hordas (ZombieConfig)</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Ajusta la densidad de zombis en el mapa, su multiplicación con el paso de los días y la frecuencia de reaparición.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-pop_multiplier">Multiplicador General de Población (PopulationMultiplier)</label>
+          <label class="form-label" for="cfg-sandbox-pop_multiplier">Multiplicador de Población (PopulationMultiplier)</label>
           <input type="number" step="0.1" id="cfg-sandbox-pop_multiplier" class="form-input" value="1.0">
           <small style="color: var(--text-dim); font-size: 0.72rem;">0.35=Muy baja, 0.65=Baja, 1.0=Normal, 1.5=Alta, 2.0=Insana.</small>
         </div>
@@ -705,58 +690,51 @@
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-pop_peak_multiplier">Multiplicador en el Día Pico (PopulationPeakMultiplier)</label>
           <input type="number" step="0.1" id="cfg-sandbox-pop_peak_multiplier" class="form-input" value="1.5">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Densidad máxima alcanzada con el paso del tiempo.</small>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-pop_peak_day">Día del Pico de Población (PopulationPeakDay)</label>
           <input type="number" id="cfg-sandbox-pop_peak_day" class="form-input" value="28">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Día en que la población alcanza el multiplicador máximo.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-respawn_multiplier">Porcentaje de Reaparición (RespawnMultiplier)</label>
+          <label class="form-label" for="cfg-sandbox-respawn_multiplier">Fracción de Reaparición (RespawnMultiplier)</label>
           <input type="number" step="0.05" id="cfg-sandbox-respawn_multiplier" class="form-input" value="0.1">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Fracción de zombis eliminados que vuelven a aparecer cada ciclo (0.1 = 10%).</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0.1 = 10% por ciclo.</small>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-respawn_hours">Horas entre Reapariciones (RespawnHours)</label>
           <input type="number" step="1" id="cfg-sandbox-respawn_hours" class="form-input" value="72">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Sin reaparición (los zombis eliminados se quedan muertos para siempre).</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">0 = Sin reaparición.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-respawn_unseen_hours">Horas sin Ver una Zona para que Reaparezcan</label>
+          <label class="form-label" for="cfg-sandbox-respawn_unseen_hours">Horas Deshabitado para Respawn (RespawnUnseenHours)</label>
           <input type="number" step="1" id="cfg-sandbox-respawn_unseen_hours" class="form-input" value="16">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Tiempo que una zona debe estar desierta para que nazcan zombis.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-redistribute_hours">Horas de Redistribución y Migración (RedistributeHours)</label>
+          <label class="form-label" for="cfg-sandbox-redistribute_hours">Horas de Redistribución (RedistributeHours)</label>
           <input type="number" step="1" id="cfg-sandbox-redistribute_hours" class="form-input" value="12">
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-rally_group_size">Tamaño de Grupos / Hordas (RallyGroupSize)</label>
           <input type="number" id="cfg-sandbox-rally_group_size" class="form-input" value="20">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Cantidad de zombis que se agrupan de forma natural.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-follow_sound_dist">Distancia que Recorren Siguiendo Sonidos (Metros)</label>
+          <label class="form-label" for="cfg-sandbox-follow_sound_dist">Distancia Siguiendo Sonidos (m)</label>
           <input type="number" id="cfg-sandbox-follow_sound_dist" class="form-input" value="100">
         </div>
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 6. MUNDO & CLIMA (Sandbox) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-world" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #38bdf8;">Tiempo, Suministros Básicos, Clima &amp; Erosión de la Naturaleza</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Configura el corte de agua y luz, la duración de cada hora real y el avance de las estaciones.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
@@ -924,13 +902,10 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 7. RAREZA DE BOTÍN (Sandbox) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-loot" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #e3b341;">Abundancia y Rareza de Recursos en Casas, Tiendas y Almacenes</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Define qué tan fácil o escaso es encontrar comida, armas, medicinas y herramientas al saquear.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
@@ -1046,20 +1021,17 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 8. VEHÍCULOS & META-EVENTOS (Sandbox) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-vehicles" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #58a6ff;">Automóviles, Evento del Helicóptero, Generadores &amp; Mapa</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Controla el estado de los coches abandonados, la frecuencia del helicóptero y el mini-mapa.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-enable_vehicles">Habilitar Vehículos en el Servidor</label>
           <select id="cfg-sandbox-enable_vehicles" class="form-select">
-            <option value="true" selected>Sí (Hay coches en calles y aparcamientos)</option>
+            <option value="true" selected>Sí</option>
             <option value="false">No</option>
           </select>
         </div>
@@ -1267,13 +1239,10 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 9. PERSONAJE & RASGOS (Sandbox) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-player" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
         <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #3fb950;">Progresión, Experiencia, Kit Inicial &amp; Salud del Superviviente</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Ajusta la velocidad para subir niveles de habilidad, puntos para rasgos positivos y kit inicial.</p>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
@@ -1281,8 +1250,8 @@
           <label class="form-label" for="cfg-sandbox-xp_multiplier">Multiplicador de Experiencia (XPMultiplier)</label>
           <select id="cfg-sandbox-xp_multiplier" class="form-select">
             <option value="0.5">0.5x — Muy Lento</option>
-            <option value="1.0" selected>1.0x — Estándar Oficial</option>
-            <option value="2.0">2.0x — Doble de Rápido (Recomendado para servidores)</option>
+            <option value="1.0" selected>1.0x — Estándar</option>
+            <option value="2.0">2.0x — Doble</option>
             <option value="3.0">3.0x — Rápido</option>
             <option value="5.0">5.0x — Muy Rápido</option>
             <option value="10.0">10.0x — Instantáneo</option>
@@ -1290,50 +1259,49 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-starter_kit">Entregar Kit de Inicio al Reaparecer (StarterKit)</label>
+          <label class="form-label" for="cfg-sandbox-starter_kit">Kit de Inicio al Reaparecer (StarterKit)</label>
           <select id="cfg-sandbox-starter_kit" class="form-select">
-            <option value="true">Sí (Mochila escolar, bate de béisbol, botella de agua, patatas)</option>
-            <option value="false" selected>No (Comienza solo con la ropa puesta)</option>
+            <option value="true">Sí (Mochila, bate, agua)</option>
+            <option value="false" selected>No</option>
           </select>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-free_trait_points">Puntos de Rasgos Gratuitos Extra</label>
           <input type="number" id="cfg-sandbox-free_trait_points" class="form-input" value="0">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Puntos para elegir ventajas al crear el personaje sin penalizaciones.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-injury_severity">Severidad de las Lesiones y Heridas</label>
+          <label class="form-label" for="cfg-sandbox-injury_severity">Severidad de Lesiones</label>
           <select id="cfg-sandbox-injury_severity" class="form-select">
             <option value="1">1 — Baja</option>
             <option value="2" selected>2 — Normal</option>
-            <option value="3">3 — Alta (Curan más lento y duelen más)</option>
+            <option value="3">3 — Alta</option>
           </select>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="cfg-sandbox-bone_fracture">Fracturas Óseas Habilitadas</label>
           <select id="cfg-sandbox-bone_fracture" class="form-select">
-            <option value="true" selected>Sí (Caídas y golpes pueden fracturar huesos)</option>
+            <option value="true" selected>Sí</option>
             <option value="false">No</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-rear_vulnerability">Vulnerabilidad a Ataques por la Espalda</label>
+          <label class="form-label" for="cfg-sandbox-rear_vulnerability">Vulnerabilidad por la Espalda</label>
           <select id="cfg-sandbox-rear_vulnerability" class="form-select">
             <option value="1">1 — Baja</option>
-            <option value="2" selected>2 — Media (Estándar)</option>
-            <option value="3">3 — Alta (Mordeduras casi seguras por detrás)</option>
+            <option value="2" selected>2 — Media</option>
+            <option value="3">3 — Alta</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-sandbox-multi_hit_zombies">Multi-Hit con Armas Cuerpo a Cuerpo</label>
+          <label class="form-label" for="cfg-sandbox-multi_hit_zombies">Multi-Hit Cuerpo a Cuerpo</label>
           <select id="cfg-sandbox-multi_hit_zombies" class="form-select">
-            <option value="true" selected>Activado (Un golpe puede impactar a varios zombis)</option>
-            <option value="false">Desactivado (Solo un zombi por golpe)</option>
+            <option value="true" selected>Activado</option>
+            <option value="false">Desactivado</option>
           </select>
         </div>
 
@@ -1369,121 +1337,92 @@
       </div>
     </div>
 
-    <!-- ========================================================================= -->
-    <!-- 10. MODS & STEAM WORKSHOP (.ini) -->
-    <!-- ========================================================================= -->
-    <div id="cfg-pane-mods" class="settings-subpane" style="display:none;">
-      <div style="margin-bottom: 18px;">
-        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #a371f7;">Mods de Steam Workshop &amp; ModIDs Activos</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">
-          Configura directamente las líneas <code>WorkshopItems=</code> y <code>Mods=</code> de tu archivo <code>{{ server_name }}.ini</code>.
-          En Project Zomboid, ambos campos van separados obligatoriamente por punto y coma (<code>;</code>).
-        </p>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr; gap: 18px;">
-        <div class="form-group">
-          <label class="form-label" for="cfg-WorkshopItems">WorkshopItems (IDs Numéricos de Steam Workshop)</label>
-          <textarea id="cfg-WorkshopItems" class="form-input" rows="3" placeholder="ej: 2729973596;2687618628;2169435993"></textarea>
-          <small style="color: var(--text-dim); font-size: 0.74rem; line-height: 1.4; display: block; margin-top: 4px;">
-            IDs numéricos de los artículos en Steam Workshop. El servidor los descarga automáticamente al iniciar en modo Steam.
-          </small>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="cfg-Mods">Mods (IDs Internos del Mod / Mod.info)</label>
-          <textarea id="cfg-Mods" class="form-input" rows="3" placeholder="ej: Hydrocraft;AuthenticZLite;FilibusterRhymesUsedCars"></textarea>
-          <small style="color: var(--text-dim); font-size: 0.74rem; line-height: 1.4; display: block; margin-top: 4px;">
-            Identificadores de los mods declarados en su <code>mod.info</code>. Es la lista que el motor de PZ carga en la memoria del juego.
-          </small>
-        </div>
-
-        <div style="background: rgba(163, 113, 247, 0.08); border: 1px solid rgba(163, 113, 247, 0.25); border-radius: 8px; padding: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-          <div>
-            <div style="font-weight: 600; color: #f0f6fc; font-size: 0.88rem;">¿Prefieres administrar mods con búsqueda y un gestor visual?</div>
-            <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 2px;">Puedes usar la pestaña especializada de Mods para añadir mods uno a uno.</div>
-          </div>
-          <button type="button" class="btn btn-outline" onclick="switchTab('mods')" style="font-size: 0.8rem; padding: 6px 14px;">
-            Ir al Gestor de Mods
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========================================================================= -->
-    <!-- 11. MOTOR & RAM -->
-    <!-- ========================================================================= -->
+    <!-- 10. MOTOR, PERFIL & MANTENIMIENTO DEL MUNDO -->
     <div id="cfg-pane-engine" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 18px;">
-        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #38bdf8;">Memoria RAM JVM, Plataforma Steam / No-Steam &amp; Rama del Motor</h3>
-        <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Ajusta la infraestructura del contenedor y parámetros del proceso Java.</p>
+        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #38bdf8;">Memoria RAM JVM, Perfil Activo, Plataforma &amp; Rama del Motor</h3>
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-memory_min">Heap Mínimo de Java (-Xms)</label>
+          <label class="form-label" for="cfg-panel-server_name">Perfil Activo (SERVER_NAME)</label>
+          <input type="text" id="cfg-panel-server_name" list="cfg-profiles-list" class="form-input" value="{{ server_name }}">
+          <datalist id="cfg-profiles-list"></datalist>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cfg-panel-memory_min">Heap Mínimo JVM (-Xms)</label>
           <input type="text" id="cfg-panel-memory_min" class="form-input" value="4g">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">RAM mínima reservada de inmediato para el servidor.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-memory_max">Heap Máximo de Java (-Xmx)</label>
+          <label class="form-label" for="cfg-panel-memory_max">Heap Máximo JVM (-Xmx)</label>
           <input type="text" id="cfg-panel-memory_max" class="form-input" value="6g">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">RAM máxima que la JVM puede consumir. Debe ser inferior al MEM_LIMIT del contenedor.</small>
+          <small style="color: var(--text-dim); font-size: 0.72rem;">Debe ser inferior al MEM_LIMIT del contenedor.</small>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-use_steam">Modo de Red del Servidor</label>
+          <label class="form-label" for="cfg-panel-use_steam">Modo de Red</label>
           <select id="cfg-panel-use_steam" class="form-select">
-            <option value="true" selected>Steam (Con integración Steamworks y Workshop automática)</option>
-            <option value="false">No-Steam / GOG (-nosteam para clientes de GOG)</option>
+            <option value="true" selected>Steam (Workshop automática)</option>
+            <option value="false">No-Steam / GOG (-nosteam)</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-autostart_server">Inicio Automático al Levantar Docker</label>
+          <label class="form-label" for="cfg-panel-autostart_server">Inicio Automático en Docker</label>
           <select id="cfg-panel-autostart_server" class="form-select">
-            <option value="true" selected>Activado (El servidor arranca solo al iniciar Docker)</option>
-            <option value="false">Desactivado (Requiere pulsar 'Iniciar' en la web)</option>
+            <option value="true" selected>Activado</option>
+            <option value="false">Desactivado</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-update_on_start">Buscar Actualizaciones en cada Inicio</label>
+          <label class="form-label" for="cfg-panel-update_on_start">Actualizar al Iniciar</label>
           <select id="cfg-panel-update_on_start" class="form-select">
             <option value="true" selected>Activado</option>
-            <option value="false">Desactivado (Arranque más veloz)</option>
+            <option value="false">Desactivado</option>
           </select>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-branch">Rama de Steam (Branch)</label>
-          <input type="text" id="cfg-panel-branch" class="form-input" placeholder="Vacío = Estable (por defecto)">
-          <small style="color: var(--text-dim); font-size: 0.72rem;">Dejar vacío para versión oficial estable, o indicar 'unstable' o 'legacy41'.</small>
+          <label class="form-label" for="cfg-panel-branch">Rama Steam (Branch)</label>
+          <input type="text" id="cfg-panel-branch" class="form-input" placeholder="Vacío = Estable (o 'unstable' / 'legacy41')">
         </div>
 
         <div class="form-group" style="grid-column: 1 / -1;">
-          <label class="form-label" for="cfg-panel-additional_args">Argumentos Adicionales de la Línea de Comandos</label>
+          <label class="form-label" for="cfg-panel-additional_args">Argumentos Adicionales de Línea de Comandos</label>
           <input type="text" id="cfg-panel-additional_args" class="form-input" placeholder="ej: -steamvac false">
         </div>
       </div>
+
+      <!-- Zona de Mantenimiento del Mundo -->
+      <div style="margin-top: 22px; padding: 16px; border: 1px solid rgba(248, 81, 73, 0.35); background: rgba(248, 81, 73, 0.06); border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+        <div>
+          <strong style="color: #ff7b72; font-size: 0.92rem;">Zona de Mantenimiento del Mundo (Wipe)</strong>
+          <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+            Respalda y reinicia <code>Saves/Multiplayer/{{ server_name }}</code> al Día 1 conservando ajustes, mods y cuentas.
+          </div>
+        </div>
+        <button type="button" class="btn btn-danger" onclick="wipeWorldNow()" style="padding: 8px 16px; font-size: 0.82rem;">
+          Wipe de Mundo (Día 1)
+        </button>
+      </div>
     </div>
 
-    <!-- ========================================================================= -->
     <!-- 11. EDITOR DIRECTO (Raw Files) -->
-    <!-- ========================================================================= -->
     <div id="cfg-pane-raw" class="settings-subpane" style="display:none;">
       <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-        <div>
-          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #e6edf3;">Editor Directo de Archivos de Configuración</h3>
-          <p style="margin: 4px 0 0 0; color: var(--text-dim); font-size: 0.8rem;">Edita directamente el texto de los archivos generados si prefieres editar parámetros crudos o de mods.</p>
-        </div>
-        <div style="display: flex; gap: 8px;">
+        <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #e6edf3;">Editor Directo de Archivos de Configuración</h3>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button type="button" class="btn btn-outline" id="btn-raw-mode-ini" onclick="toggleRawFileView('ini')" style="padding: 4px 12px; font-size: 0.8rem; background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #38bdf8;">
             &lt;SERVER_NAME&gt;.ini
           </button>
           <button type="button" class="btn btn-outline" id="btn-raw-mode-sandbox" onclick="toggleRawFileView('sandbox')" style="padding: 4px 12px; font-size: 0.8rem;">
             SandboxVars.lua
+          </button>
+          <button type="button" class="btn btn-outline" id="btn-raw-mode-spawnregions" onclick="toggleRawFileView('spawnregions')" style="padding: 4px 12px; font-size: 0.8rem;">
+            spawnregions.lua
           </button>
           <button type="button" class="btn btn-primary" onclick="saveRawFileCurrent()" style="padding: 4px 16px; font-size: 0.8rem;">
             Guardar Archivo Raw
@@ -1498,27 +1437,8 @@
     </div>
 
   </div>
-
-  <!-- Barra de Acciones Inferior -->
-  <div style="padding: 16px 24px; border-top: 1px solid var(--border-color); background: var(--bg-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-      <button type="button" class="btn btn-outline" onclick="switchTab('mods')" style="padding: 6px 12px; font-size: 0.78rem;">
-        Gestionar Mods Workshop
-      </button>
-      <button type="button" class="btn btn-outline" onclick="switchTab('console')" style="padding: 6px 12px; font-size: 0.78rem;">
-        Ir a Consola
-      </button>
-    </div>
-    <div style="display: flex; gap: 10px;">
-      <button type="button" class="btn btn-primary" onclick="saveAllSettings()" style="padding: 8px 24px; font-size: 0.88rem; font-weight: 600;">
-        Guardar Todos los Ajustes
-      </button>
-    </div>
-  </div>
-
 </div>
 
-<!-- Estilos específicos para la sub-navegación -->
 <style>
 .subnav-btn {
   display: inline-flex;

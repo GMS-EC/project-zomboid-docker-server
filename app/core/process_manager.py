@@ -18,19 +18,23 @@ logger = logging.getLogger("pzserver.process")
 
 PZ_STEAMCMD_APPID = "380870"
 
+_RE_PLAYERS_HEADER = re.compile(r"Players connected\s*\((\d+)\)\s*:", re.IGNORECASE)
+_RE_STEAMID = re.compile(r"(?:SteamID[:=\s]+|7656119)(7656119\d{10}|\d{17})", re.IGNORECASE)
+_RE_JOIN_PATTERNS = [
+    re.compile(r'^\[PZ-Sim\]\s*Jugador conectado:\s*["\']?([A-Za-z0-9_\-\. ]+?)["\']?(?:\s*\(SteamID:\s*([0-9]+)\))?$', re.IGNORECASE),
+    re.compile(r'\buser\s+["\']?([^"\'\n]+?)["\']?\s+fully connected\b', re.IGNORECASE),
+    re.compile(r'\bplayer\s+["\']?([^"\'\n]+?)["\']?\s+(?:joined|fully connected|connected)(?:\s*\(SteamID:\s*([0-9]+)\))?', re.IGNORECASE),
+]
+_RE_LEAVE_PATTERNS = [
+    re.compile(r'^\[PZ-Sim\]\s*Jugador desconectado:\s*["\']?([A-Za-z0-9_\-\. ]+?)["\']?$', re.IGNORECASE),
+    re.compile(r'\buser\s+["\']?([^"\'\n]+?)["\']?\s+disconnected\b', re.IGNORECASE),
+    re.compile(r'\bplayer\s+["\']?([^"\'\n]+?)["\']?\s+(?:left|disconnected)\b', re.IGNORECASE),
+    re.compile(r'\bConnectionLost\b.*?username=["\']?([^"\'\s]+)["\']?', re.IGNORECASE),
+]
+
 
 class ProcessManager:
-    """
-    Controlador del ciclo de vida del servidor dedicado de Project Zomboid.
-
-    Project Zomboid administra su consola por STDIN del
-    proceso. Este manager:
-      - Instala/actualiza con SteamCMD (AppID 380870) solo en modo Steam.
-      - Arranca el lanzador real (vía pz_run.sh) con stdin en modo PIPE.
-      - En ausencia de binarios (desarrollo/validación) arranca una SIMULACIÓN.
-      - Difunde las líneas de consola (stdout) a los clientes WebSocket.
-      - Envía comandos escribiendo en el stdin del proceso.
-    """
+    """Ciclo de vida del proceso PZ (instalación, ejecución por STDIN, consola WebSocket y jugadores)."""
 
     def __init__(self):
         self.process: Optional[asyncio.subprocess.Process] = None
@@ -38,13 +42,38 @@ class ProcessManager:
         self.connected_websockets: Set[WebSocket] = set()
         self.log_buffer: Deque[str] = deque(maxlen=2000)
         self._reader_task: Optional[asyncio.Task] = None
-        self._log_file_task: Optional[asyncio.Task] = None
         self.started_at: Optional[float] = None
+        self.last_start_time: Optional[float] = None
+        self.last_exit_code: Optional[int] = None
         self._intentional_stop: bool = False
         self._server_up_detected: bool = False
         self._is_simulation: bool = False
+        self.install_progress: Dict[str, Any] = {
+            "running": False,
+            "percent": 0.0,
+            "step": "",
+            "last_line": "",
+        }
+
+        # Tracking en vivo de jugadores conectados (clave = username.lower())
+        self.online_players: Dict[str, Dict[str, Any]] = {}
+        self._collecting_players: bool = False
+        self._collecting_expected_count: int = 0
+        self._collecting_players_until: float = 0.0
+        self._collected_players: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------------ helpers
+    @staticmethod
+    def _schedule_bg(coro) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(coro)
+        except RuntimeError:
+            try:
+                coro.close()
+            except Exception:
+                pass
+
     @staticmethod
     def _is_pz_process_running() -> bool:
         try:
@@ -87,21 +116,148 @@ class ProcessManager:
             return
         self.log_buffer.append(clean_line)
         dead_ws = set()
-        for ws in self.connected_websockets:
+        for ws in list(self.connected_websockets):
             try:
                 await ws.send_text(clean_line)
             except Exception:
                 dead_ws.add(ws)
         self.connected_websockets.difference_update(dead_ws)
 
+    # ------------------------------------------------------------ detección jugadores
+    def _finalize_players_collection(self) -> None:
+        if not self._collecting_players:
+            return
+        self._collecting_players = False
+        merged: Dict[str, Dict[str, Any]] = {}
+        for key, entry in self._collected_players.items():
+            existing = self.online_players.get(key)
+            if existing and not entry.get("steam_id"):
+                entry["steam_id"] = existing.get("steam_id", "")
+            if existing and existing.get("connected_at"):
+                entry["connected_at"] = existing["connected_at"]
+            merged[key] = entry
+        self.online_players = merged
+        self._collected_players = {}
+
+    def _record_player_join(self, username: str, steam_id: str = "") -> None:
+        clean = username.strip().strip('"').strip()
+        if not clean:
+            return
+        key = clean.lower()
+        existing = self.online_players.get(key, {})
+        sid = steam_id or existing.get("steam_id", "")
+        self.online_players[key] = {
+            "name": clean,
+            "steam_id": sid,
+            "connected_at": existing.get("connected_at") or time.time(),
+        }
+        try:
+            from app.core.player_manager import player_manager
+            player_manager.record_join(clean, sid)
+        except Exception:
+            pass
+        try:
+            from app.core.webhook_manager import webhook_manager
+            self._schedule_bg(
+                webhook_manager.notify(
+                    "players_join",
+                    f"El superviviente **{clean}** se ha conectado al servidor.",
+                )
+            )
+        except Exception:
+            pass
+
+    def _record_player_leave(self, username: str) -> None:
+        clean = username.strip().strip('"').strip()
+        if not clean:
+            return
+        key = clean.lower()
+        removed = self.online_players.pop(key, None)
+        display_name = removed.get("name", clean) if removed else clean
+        try:
+            from app.core.player_manager import player_manager
+            player_manager.record_leave(display_name)
+        except Exception:
+            pass
+        try:
+            from app.core.webhook_manager import webhook_manager
+            self._schedule_bg(
+                webhook_manager.notify(
+                    "players_leave",
+                    f"El superviviente **{display_name}** ha salido del servidor.",
+                )
+            )
+        except Exception:
+            pass
+
+    def parse_console_line(self, line: str) -> None:
+        """Analiza una línea de salida de consola para actualizar estado y jugadores en línea."""
+        stripped = line.strip()
+        if not stripped:
+            if self._collecting_players:
+                self._finalize_players_collection()
+            return
+        if stripped.startswith(">"):
+            return
+
+        # 1) Respuesta a 'players': "Players connected (N):" seguido de "-nombre"
+        m_hdr = _RE_PLAYERS_HEADER.search(stripped)
+        if m_hdr:
+            count = int(m_hdr.group(1))
+            if count == 0:
+                self.online_players.clear()
+                self._collecting_players = False
+                self._collecting_expected_count = 0
+                self._collected_players = {}
+            else:
+                self._collecting_players = True
+                self._collecting_expected_count = count
+                self._collecting_players_until = time.time() + 3.0
+                self._collected_players = {}
+            return
+
+        if self._collecting_players:
+            if time.time() > self._collecting_players_until:
+                self._finalize_players_collection()
+            elif stripped.startswith("-"):
+                pname = stripped[1:].strip()
+                if pname:
+                    existing = self.online_players.get(pname.lower(), {})
+                    self._collected_players[pname.lower()] = {
+                        "name": pname,
+                        "steam_id": existing.get("steam_id", ""),
+                        "connected_at": existing.get("connected_at") or time.time(),
+                    }
+                    if len(self._collected_players) >= self._collecting_expected_count:
+                        self._finalize_players_collection()
+                return
+            else:
+                self._finalize_players_collection()
+
+        # 2) Eventos de conexión
+        for pat in _RE_JOIN_PATTERNS:
+            m = pat.search(stripped)
+            if m:
+                pname = m.group(1).strip()
+                sid = m.group(2).strip() if m.lastindex and m.lastindex >= 2 and m.group(2) else ""
+                if not sid:
+                    m_sid = _RE_STEAMID.search(stripped)
+                    if m_sid:
+                        raw_sid = m_sid.group(1)
+                        sid = raw_sid if raw_sid.startswith("7656119") else f"7656119{raw_sid}"
+                self._record_player_join(pname, sid)
+                return
+
+        # 3) Eventos de desconexión
+        for pat in _RE_LEAVE_PATTERNS:
+            m = pat.search(stripped)
+            if m:
+                self._record_player_leave(m.group(1))
+                return
+
     # ------------------------------------------------------------ instalación
     def _patch_launcher_memory(self) -> None:
-        """Ajusta -Xms/-Xmx del lanzador JVM.
-
-        En B42 los args de memoria viven en ProjectZomboid64.json (campo vmArgs).
-        Se prefiere editar ese JSON; si no existe, se hace un fallback textual
-        sobre los lanzadores .sh/.bat que hornean -Xms/-Xmx.
-        """
+        """Ajusta -Xms/-Xmx del lanzador JVM."""
         if not settings.override_launcher_memory:
             return
         root = settings.server_dir
@@ -122,10 +278,8 @@ class ProcessManager:
             try:
                 data = f.read_text(encoding="utf-8", errors="strict")
             except Exception:
-                continue  # binario o encoding raro: se omite para no corromper
-            if "\x00" in data:
                 continue
-            if not re.search(r"-Xm[sx]\d+", data):
+            if "\x00" in data or not re.search(r"-Xm[sx]\d+", data):
                 continue
             new_data = pattern.sub(
                 lambda m: ("-Xms" + settings.memory_min) if m.group(0).startswith("-Xms")
@@ -135,7 +289,7 @@ class ProcessManager:
             if new_data != data:
                 try:
                     f.write_text(new_data, encoding="utf-8")
-                    asyncio.create_task(
+                    self._schedule_bg(
                         self.broadcast_log(
                             f"[PZ-Server] Heap del lanzador ajustado en {f.name} (min={settings.memory_min}, max={settings.memory_max})"
                         )
@@ -157,26 +311,25 @@ class ProcessManager:
                 vm = []
             changed = False
 
-            def _replace(arg_prefix: str, new_val: str, lowered: bool) -> bool:
-                nonlocal vm, changed
+            def _replace(new_val: str, lowered: str) -> None:
+                nonlocal changed
                 for i, arg in enumerate(vm):
                     if isinstance(arg, str) and arg.lower().startswith(lowered):
                         if arg != new_val:
                             vm[i] = new_val
                             changed = True
-                        return True
+                        return
                 vm.append(new_val)
                 changed = True
-                return True
 
-            _replace("-Xms", "-Xms" + settings.memory_min, "-xms")
-            _replace("-Xmx", "-Xmx" + settings.memory_max, "-xmx")
+            _replace("-Xms" + settings.memory_min, "-xms")
+            _replace("-Xmx" + settings.memory_max, "-xmx")
             if changed:
                 cfg["vmArgs"] = vm
                 tmp = json_file.with_suffix(".json.tmp")
                 tmp.write_text(json.dumps(cfg, indent=4), encoding="utf-8")
                 tmp.replace(json_file)
-                asyncio.create_task(
+                self._schedule_bg(
                     self.broadcast_log(
                         f"[PZ-Server] Heap ajustado en ProjectZomboid64.json (min={settings.memory_min}, max={settings.memory_max})"
                     )
@@ -185,7 +338,6 @@ class ProcessManager:
         except Exception as e:
             logger.warning(f"No se pudo ajustar ProjectZomboid64.json: {e}")
             return False
-
 
     def _steamcmd_path(self) -> str:
         env_path = os.getenv("STEAMCMD", "").strip()
@@ -201,28 +353,61 @@ class ProcessManager:
         candidate = Path("/depotdownloader/DepotDownloader")
         return str(candidate) if candidate.exists() else None
 
-    async def install_server(self) -> bool:
-        """Descarga/actualiza los binarios del servidor dedicado (descarga anónima).
+    def _update_install_progress(self, line: str) -> None:
+        clean = (line or "").strip()
+        if not clean:
+            return
+        low = clean.lower()
+        pct = float(self.install_progress.get("percent", 0.0) or 0.0)
+        m_pct = re.search(r"(\d{1,3}(?:\.\d+)?)\s*%", clean)
+        if m_pct:
+            try:
+                pct = max(0.0, min(100.0, float(m_pct.group(1))))
+            except ValueError:
+                pass
 
-        Funciona en modo Steam y No-Steam: los binarios oficiales del servidor PZ
-        se descargan igualmente (AppID 380870, anónimo). El modo No-Steam solo
-        cambia el arranque (-nosteam), no la descarga.
-        """
+        step = self.install_progress.get("step") or "Descargando servidor..."
+        if "download" in low or "descarg" in low:
+            step = "Descargando archivos del servidor (AppID 380870)..."
+        elif "validat" in low or "verify" in low or "verific" in low:
+            step = "Verificando integridad de archivos..."
+        elif "pre-allocat" in low or "prealloc" in low:
+            step = "Reservando espacio en disco..."
+        elif "connect" in low or "logging in" in low:
+            step = "Conectando con Steam..."
+        elif "success" in low or "[ok]" in low or "completad" in low:
+            step = "Instalación completada"
+            pct = 100.0
+
+        self.install_progress = {
+            "running": True,
+            "percent": round(pct, 1),
+            "step": step,
+            "last_line": clean[:220],
+        }
+
+    async def install_server(self, auto_start: bool = False) -> bool:
+        """Descarga/actualiza los binarios del servidor dedicado (descarga anónima)."""
         if self.status in ("RUNNING", "STARTING", "INSTALLING"):
             await self.broadcast_log("[PZ-Server] Ya hay una tarea o proceso en ejecución.")
             return False
 
         self.status = "INSTALLING"
+        self.install_progress = {
+            "running": True,
+            "percent": 2.0,
+            "step": "Iniciando descarga (AppID 380870)...",
+            "last_line": "",
+        }
         await self.broadcast_log("=" * 60)
         await self.broadcast_log(" Descargando Project Zomboid Dedicated Server (AppID 380870)")
         await self.broadcast_log("=" * 60)
         await self.broadcast_log(f"[PZ-Server] Destino: {settings.server_dir}")
         await self.broadcast_log(
             "[PZ-Server] Modo " + ("STEAM" if settings.use_steam else "NO-STEAM")
-            + ": la descarga de binarios es anónima en ambos modos."
+            + (f" | Rama: {settings.branch}" if settings.branch else " | Rama: estable")
         )
 
-        # 1) DepotDownloader (descarga anónima fiable para este AppID)
         depot = self._depotdownloader_path()
         if depot:
             await self.broadcast_log("[PZ-Server] Instalador: DepotDownloader (anónimo).")
@@ -235,7 +420,6 @@ class ProcessManager:
             if settings.branch:
                 cmd += ["-branch", settings.branch]
         else:
-            # 2) Fallback: SteamCMD (a veces falla con 'Missing configuration')
             await self.broadcast_log(
                 "[PZ-Server] Instalador: SteamCMD (DepotDownloader no disponible; si falla, "
                 "revisa el error 'Missing configuration')."
@@ -252,7 +436,6 @@ class ProcessManager:
             cmd += ["validate", "+quit"]
 
         tool_name = "DepotDownloader" if depot else "SteamCMD"
-        # El panel corre como usuario `steam` dentro del contenedor.
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -265,29 +448,45 @@ class ProcessManager:
                 line = await proc.stdout.readline()
                 if not line:
                     break
-                await self.broadcast_log(line.decode("utf-8", errors="replace").rstrip())
+                decoded = line.decode("utf-8", errors="replace").rstrip()
+                self._update_install_progress(decoded)
+                await self.broadcast_log(decoded)
             await proc.wait()
 
             if proc.returncode == 0:
                 self._make_launchers_executable()
                 self._patch_launcher_memory()
+                self.install_progress = {
+                    "running": False,
+                    "percent": 100.0,
+                    "step": "Instalación completada",
+                    "last_line": "[OK] Servidor instalado/actualizado correctamente.",
+                }
                 await self.broadcast_log("[PZ-Server] [OK] Servidor instalado/actualizado correctamente.")
                 self.status = "OFFLINE"
+                if auto_start:
+                    await self.broadcast_log("[PZ-Server] Auto-arrancando servidor tras completar instalación...")
+                    await self.start_server()
                 return True
             await self.broadcast_log(f"[PZ-Server] [ERROR] {tool_name} falló (código {proc.returncode}).")
+            self.install_progress["running"] = False
+            self.install_progress["step"] = "Error en la descarga"
             self.status = "OFFLINE"
             return False
         except FileNotFoundError:
             await self.broadcast_log(f"[PZ-Server] [ERROR] No se encontró el instalador: {tool_name}")
+            self.install_progress["running"] = False
+            self.install_progress["step"] = "Error en la descarga"
             self.status = "OFFLINE"
             return False
         except Exception as e:
             await self.broadcast_log(f"[PZ-Server] [ERROR] Instalación fallida: {e}")
+            self.install_progress["running"] = False
+            self.install_progress["step"] = "Error en la descarga"
             self.status = "OFFLINE"
             return False
 
     def _make_launchers_executable(self) -> None:
-        """Da permisos de ejecución a los lanzadores descargados."""
         try:
             for name in ("start-server.sh", "ProjectZomboid64", "ProjectZomboid32"):
                 f = settings.server_dir / name
@@ -304,12 +503,6 @@ class ProcessManager:
 
     # ------------------------------------------------------------ arranque
     def _ensure_ini_defaults(self) -> None:
-        """Pre-escribe claves mínimas del <SERVER_NAME>.ini si no existen.
-
-        La primera ejecución del server genera el resto del .ini con valores por
-        defecto; aquí forzamos que los puertos y límites coincidan con el compose.
-        Sigue la estrategia 'insert-if-missing' (no pisa valores ya editados).
-        """
         ini_dir = settings.data_dir / "Server"
         ini = ini_dir / f"{settings.server_name}.ini"
         defaults = {
@@ -335,7 +528,7 @@ class ProcessManager:
                     added.append(f"{key}={value}")
             if added:
                 ini.write_text("\n".join(lines) + "\n", encoding="utf-8")
-                asyncio.create_task(
+                self._schedule_bg(
                     self.broadcast_log(
                         f"[PZ-Server] Claves iniciales añadidas a {ini.name}: {', '.join(k.split('=')[0] for k in added)}"
                     )
@@ -358,8 +551,6 @@ class ProcessManager:
             "ADDITIONAL_ARGS": settings.additional_args,
             "HOME": os.getenv("HOME", "/home/steam"),
             "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
-            # El subproceso (simulación o consola PZ) debe emitir UTF-8 para que el
-            # panel lo decodifique sin pérdida (evita mojibake cp1252 en Windows).
             "PYTHONIOENCODING": "utf-8",
         })
         return env
@@ -378,9 +569,9 @@ class ProcessManager:
 
         self._intentional_stop = False
         self._server_up_detected = False
+        self.last_exit_code = None
+        self.online_players.clear()
 
-        # 0. Instalación automática si no hay binarios (en contenedor):
-        #    crea/rellena el volumen PZ_SERVER_DIR con la descarga anónima.
         if not self.is_installed() and settings.in_container:
             await self.broadcast_log(
                 "[PZ-Server] Servidor no instalado. Descargando binarios automáticamente "
@@ -395,17 +586,13 @@ class ProcessManager:
                 self.status = "OFFLINE"
                 return False
 
-        # 1. Si hay binarios reales, lanzarlos vía pz_run.sh (construye args PZ)
         if self.is_installed():
             self.status = "STARTING"
             await self.broadcast_log(f"[PZ-Server] Iniciando Project Zomboid ({settings.server_name})...")
-            # Ajustes de la referencia (indifferentbroccoli/pz): memoria en
-            # ProjectZomboid64.json + claves mínimas del .ini antes de arrancar.
             self._patch_launcher_memory()
             self._ensure_ini_defaults()
             pz_run = settings.pz_run_script
             if not pz_run.exists():
-                # Fallback a la copia local del repositorio (desarrollo)
                 pz_run = settings.base_dir / "scripts" / "pz_run.sh"
             if pz_run.exists():
                 cmd = ["bash", str(pz_run)]
@@ -417,14 +604,15 @@ class ProcessManager:
                     return False
                 cmd = ["bash", str(launcher)]
         else:
-            # 2. Sin binarios y fuera del contenedor (desarrollo/validación local): simulación
             self.status = "STARTING"
             self._is_simulation = True
             await self.broadcast_log("[PZ-Server] [SIMULACIÓN] No hay binarios: arrancando servidor simulado...")
             cmd = [sys.executable, "-m", "app.core.sim_server"]
             self._server_up_detected = False
 
-        self.started_at = time.time()
+        now = time.time()
+        self.started_at = now
+        self.last_start_time = now
         try:
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -436,11 +624,17 @@ class ProcessManager:
             )
         except Exception as e:
             self.status = "OFFLINE"
+            self._is_simulation = False
             await self.broadcast_log(f"[PZ-Server] Error al iniciar el proceso: {e}")
             return False
 
         self._reader_task = asyncio.create_task(self._stream_output(self.process))
         await self.broadcast_log(f"[PZ-Server] Proceso lanzado (PID {self.process.pid}). Estado: STARTING.")
+        try:
+            from app.core.webhook_manager import webhook_manager
+            self._schedule_bg(webhook_manager.notify("starting", f"Iniciando servidor {settings.server_name}..."))
+        except Exception:
+            pass
         asyncio.create_task(self._watch_server_readiness())
         return True
 
@@ -461,49 +655,34 @@ class ProcessManager:
             up = decoded.upper()
             if any(marker.upper() in up for marker in settings.ready_markers):
                 self._server_up_detected = True
+            self.parse_console_line(decoded)
             await self.broadcast_log(decoded)
         await proc.wait()
+        self.last_exit_code = proc.returncode
+        self.online_players.clear()
         if not self._intentional_stop:
-            await self.broadcast_log("[PZ-Server] El proceso del servidor se ha detenido.")
+            await self.broadcast_log(f"[PZ-Server] El proceso del servidor se ha detenido (código {proc.returncode}).")
+            try:
+                from app.core.webhook_manager import webhook_manager
+                if proc.returncode not in (0, None):
+                    await webhook_manager.notify("crash", f"El proceso terminó inesperadamente (código {proc.returncode}).")
+                else:
+                    await webhook_manager.notify("shutdown")
+            except Exception:
+                pass
         self.status = "OFFLINE"
+        self.started_at = None
         self._is_simulation = False
         self._reader_task = None
 
-    async def _stream_log_file(self) -> None:
-        """Tail opcional de console.txt (el server PZ duplica su consola a este archivo)."""
-        log_path = settings.console_log
-        for _ in range(30):
-            if log_path.exists():
-                break
-            await asyncio.sleep(1)
-        if not log_path.exists():
-            return
-        try:
-            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-                f.seek(0, os.SEEK_END)
-                while self.status in ("STARTING", "RUNNING"):
-                    line = f.readline()
-                    if line:
-                        clean = line.rstrip("\r\n")
-                        if clean:
-                            await self.broadcast_log(clean)
-                    else:
-                        await asyncio.sleep(0.5)
-                        f.seek(f.tell())
-        except Exception:
-            pass
-        finally:
-            self._log_file_task = None
-
     # ------------------------------------------------------------ disponibilidad
     async def _watch_server_readiness(self) -> None:
-        """Espera a que el server cargue el mundo (marcador de log) o a un timeout."""
         start = time.time()
         last_heartbeat = start
         await self.broadcast_log("[PZ-Server] Monitor de disponibilidad activo. Cargando mundo...")
 
         while self.status == "STARTING" and self.process and self.process.returncode is None:
-            await asyncio.sleep(4.0)
+            await asyncio.sleep(2.0 if self._is_simulation else 4.0)
             if self.status != "STARTING":
                 return
 
@@ -513,15 +692,24 @@ class ProcessManager:
                 self.status = "RUNNING"
                 await self.broadcast_log("[PZ-Server] [OK] ¡Servidor 100% listo y aceptando jugadores!")
                 await self.broadcast_log(f"[PZ-Server] Mundo '{settings.server_name}' cargado en {elapsed}s.")
+                try:
+                    from app.core.webhook_manager import webhook_manager
+                    await webhook_manager.notify("start", f"Mundo `{settings.server_name}` listo en {elapsed}s.")
+                except Exception:
+                    pass
                 return
 
-            # Timeout de seguridad: builds que no imprimen el marcador esperado
             if elapsed > 240:
                 self.status = "RUNNING"
                 await self.broadcast_log(
                     "[PZ-Server] [OK] Servidor marcado como RUNNING (timeout de 240s). "
                     "Si tu build no emitió el marcador, ajusta PZ_READY_MARKERS."
                 )
+                try:
+                    from app.core.webhook_manager import webhook_manager
+                    await webhook_manager.notify("start", f"Servidor `{settings.server_name}` activo.")
+                except Exception:
+                    pass
                 return
 
             if time.time() - last_heartbeat >= 45:
@@ -533,13 +721,6 @@ class ProcessManager:
                     "Los servidores PZ pueden tardar varios minutos en el primer arranque."
                 )
 
-    async def is_server_ready(self) -> bool:
-        if self._server_up_detected:
-            return True
-        if self._is_simulation and self.started_at and (time.time() - self.started_at > 6):
-            return True
-        return False
-
     # ------------------------------------------------------------ comandos
     async def _write_console(self, text: str) -> None:
         if self.process and self.process.stdin and self.process.returncode is None:
@@ -549,7 +730,6 @@ class ProcessManager:
                 return
             except Exception as e:
                 logger.debug(f"No se pudo escribir en stdin: {e}")
-        # Fallback: FIFO de control (solo si el server fuera lanzado fuera del panel)
         fifo = settings.control_fifo
         if fifo.exists():
             try:
@@ -566,16 +746,20 @@ class ProcessManager:
         if not self.process or self.process.returncode is not None:
             return "[PZ-Server] El servidor no está en ejecución."
         await self._write_console(cmd)
-        # PZ no devuelve una respuesta estructurada: la salida llega por la consola.
         return f"[PZ-Server] Comando enviado a la consola: {cmd}"
 
     async def save_world(self) -> str:
         await self.broadcast_log("[PZ-Server] Guardando mundo... (save)")
         await self._write_console("save")
+        try:
+            from app.core.webhook_manager import webhook_manager
+            self._schedule_bg(webhook_manager.notify("save"))
+        except Exception:
+            pass
         return "[PZ-Server] save enviado."
 
     async def broadcast(self, message: str) -> str:
-        safe = message.replace('"', '\\"')
+        safe = message.replace('"', '\\"').replace("\n", " ").replace("\r", "")
         await self._write_console(f'servermsg "{safe}"')
         return f"[PZ-Server] servermsg enviado: {message}"
 
@@ -593,8 +777,8 @@ class ProcessManager:
         self._intentional_stop = True
         await self.broadcast_log("[PZ-Server] Apagado seguro: guardando y enviando 'quit' a la consola...")
         try:
-            await self.save_world()
-            await asyncio.sleep(2)
+            await self._write_console("save")
+            await asyncio.sleep(1.5)
             await self._write_console("quit")
         except Exception:
             pass
@@ -622,12 +806,18 @@ class ProcessManager:
         self.status = "OFFLINE"
         self.started_at = None
         self._is_simulation = False
+        self.online_players.clear()
         await self.broadcast_log("[PZ-Server] Servidor de Project Zomboid detenido.")
+        try:
+            from app.core.webhook_manager import webhook_manager
+            await webhook_manager.notify("shutdown")
+        except Exception:
+            pass
         return True
 
     async def restart_server(self) -> bool:
         await self.stop_server()
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
         self._intentional_stop = False
         return await self.start_server()
 
