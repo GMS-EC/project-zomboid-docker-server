@@ -211,6 +211,25 @@ docker run -d \
 
 ---
 
+### 🧠 Gestión de Memoria RAM (`MEM_LIMIT` vs `-Xms` / `-Xmx`)
+
+Existen **dos límites distintos** porque controlan capas diferentes:
+
+- **`MEM_LIMIT` (en `.env` / `docker-compose.yml`)**: Es el **techo máximo de RAM para todo el contenedor** impuesto por Docker/Linux. Protege al servidor físico o VPS evitando que un pico de memoria congele la máquina.
+- **`-Xms` y `-Xmx` (en el panel web → Setup / Ajustes → Motor & RAM)**: Controlan únicamente el **Heap de Java** donde vive la lógica JVM de Project Zomboid (`-Xms` = memoria inicial reservada; `-Xmx` = tope del heap Java).
+
+Además del heap (`-Xmx`), dentro del contenedor consumen memoria las librerías nativas C++ de Project Zomboid, LuaJIT, Metaspace, red y el panel web (en **Build 42** esta memoria fuera del heap suele sumar entre **1.5 GB y 2.5 GB** adicionales). Por eso **`MEM_LIMIT` siempre debe estar 2 a 3 GB por encima de `-Xmx`**.
+
+| Escenario | `-Xms` (Panel) | `-Xmx` (Panel) | `MEM_LIMIT` (`.env`) |
+| :--- | :---: | :---: | :---: |
+| Build 41 / servidor ligero (pocos jugadores) | `2g` | `4g` | `7g` |
+| Build 42 o servidor mediano con mods | `4g` | `6g` | `9g` – `10g` |
+| Build 42 pesado / muchos mods | `4g` | `8g` | `11g` – `12g` |
+
+> **Si ves `./start-server.sh: ... Killed ./ProjectZomboid64`**: Linux detuvo el juego por falta de RAM (`OOMKilled`). Reduce `-Xmx` en **Ajustes → Motor & RAM** (por ejemplo a `4g`) o sube `MEM_LIMIT` en `.env` y recrea el contenedor (`docker compose up -d`). Puedes verificarlo con `docker inspect pz-server --format '{{.State.OOMKilled}}'`.
+
+---
+
 ### 🧪 Pruebas Automatizadas
 
 ```bash
@@ -383,6 +402,25 @@ docker run -d \
 | `./pz-config` | `/app/data` | Persistent panel config (`pz_panel_config.json`), tasks, and webhooks. |
 
 > **Linux Volume Permissions (`PUID`/`PGID`)**: On startup, `scripts/init.sh` aligns mounted volume ownership with `PUID`/`PGID` and switches to the unprivileged `steam` user before launching the panel and server.
+
+---
+
+### 🧠 Memory Management (`MEM_LIMIT` vs `-Xms` / `-Xmx`)
+
+There are **two separate memory limits** because they control different layers:
+
+- **`MEM_LIMIT` (in `.env` / `docker-compose.yml`)**: The **hard RAM ceiling for the entire container** enforced by Docker/Linux (`cgroups`). It protects your host PC or VPS from running out of memory.
+- **`-Xms` and `-Xmx` (in the web panel → Setup / Settings → Motor & RAM)**: Control **only the Java JVM heap** for Project Zomboid (`-Xms` = initial reserved heap; `-Xmx` = max Java heap).
+
+Beyond the Java heap (`-Xmx`), the same container also allocates native C++ engine memory, LuaJIT, JVM Metaspace, networking, and the FastAPI web panel (on **Build 42**, this off-heap usage often adds **1.5–2.5 GB**). Always keep **`MEM_LIMIT` at least 2–3 GB higher than `-Xmx`**.
+
+| Workload | `-Xms` (Panel) | `-Xmx` (Panel) | `MEM_LIMIT` (`.env`) |
+| :--- | :---: | :---: | :---: |
+| Build 41 / light server | `2g` | `4g` | `7g` |
+| Build 42 / medium modded server | `4g` | `6g` | `9g` – `10g` |
+| Heavy Build 42 / large modpacks | `4g` | `8g` | `11g` – `12g` |
+
+> **If you see `./start-server.sh: ... Killed ./ProjectZomboid64`**: Linux terminated the game due to Out-Of-Memory (`OOMKilled`). Lower `-Xmx` in **Settings → Motor & RAM** (e.g., `4g`) or raise `MEM_LIMIT` in `.env` and run `docker compose up -d`. You can confirm with `docker inspect pz-server --format '{{.State.OOMKilled}}'`.
 
 ---
 
