@@ -19,6 +19,7 @@ logger = logging.getLogger("pzserver.process")
 PZ_STEAMCMD_APPID = "380870"
 
 _RE_PLAYERS_HEADER = re.compile(r"Players connected\s*\((\d+)\)\s*:", re.IGNORECASE)
+_RE_PZ_VERSION = re.compile(r"\bversion[=:\s]+(\d+\.\d+(?:\.\d+)?)", re.IGNORECASE)
 _RE_STEAMID = re.compile(r"(?:SteamID[:=\s]+|7656119)(7656119\d{10}|\d{17})", re.IGNORECASE)
 _RE_JOIN_PATTERNS = [
     re.compile(r'^\[PZ-Sim\]\s*Jugador conectado:\s*["\']?([A-Za-z0-9_\-\. ]+?)["\']?(?:\s*\(SteamID:\s*([0-9]+)\))?$', re.IGNORECASE),
@@ -48,6 +49,7 @@ class ProcessManager:
         self._intentional_stop: bool = False
         self._server_up_detected: bool = False
         self._is_simulation: bool = False
+        self.pz_version: Optional[str] = None
         self.install_progress: Dict[str, Any] = {
             "running": False,
             "percent": 0.0,
@@ -199,6 +201,10 @@ class ProcessManager:
             return
         if stripped.startswith(">"):
             return
+
+        m_ver = _RE_PZ_VERSION.search(stripped)
+        if m_ver:
+            self.pz_version = m_ver.group(1)
 
         # 1) Respuesta a 'players': "Players connected (N):" seguido de "-nombre"
         m_hdr = _RE_PLAYERS_HEADER.search(stripped)
@@ -569,6 +575,7 @@ class ProcessManager:
 
         self._intentional_stop = False
         self._server_up_detected = False
+        self.pz_version = None
         self.last_exit_code = None
         self.online_players.clear()
 
@@ -644,6 +651,22 @@ class ProcessManager:
             if candidate.exists():
                 return candidate
         return None
+
+    def get_pz_version(self) -> str:
+        """Devuelve la versión detectada del servidor PZ (en vivo o desde console.txt)."""
+        if self.pz_version:
+            return self.pz_version
+        log_path = settings.console_log
+        if log_path.is_file():
+            try:
+                text = log_path.read_text(encoding="utf-8", errors="replace")[:16384]
+                matches = _RE_PZ_VERSION.findall(text)
+                if matches:
+                    self.pz_version = matches[-1]
+                    return self.pz_version
+            except Exception:
+                pass
+        return ""
 
     async def _stream_output(self, proc: asyncio.subprocess.Process) -> None:
         assert proc.stdout is not None

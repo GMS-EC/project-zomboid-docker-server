@@ -81,6 +81,7 @@ def isolated_env(tmp_path):
     process_manager.last_exit_code = None
     process_manager.process = None
     process_manager.status = "OFFLINE"
+    process_manager.pz_version = None
     process_manager.install_progress = {"running": False, "percent": 0.0, "step": "", "last_line": ""}
 
     yield tmp_path

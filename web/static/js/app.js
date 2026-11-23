@@ -816,6 +816,16 @@ async function fetchMetricsOnce() {
             topPortEl.textContent = pub || `${curr.server_port} (UDP)`;
             if (topPortLabel) topPortLabel.textContent = pub ? "Dirección Pública:" : "Puerto de Juego:";
         }
+        const consoleVerEl = document.getElementById("console-pz-version");
+        if (consoleVerEl && (curr.pz_version !== undefined || curr.branch !== undefined)) {
+            if (curr.pz_version) {
+                consoleVerEl.textContent = `PZ v${curr.pz_version}`;
+            } else if (curr.branch) {
+                consoleVerEl.textContent = `Rama: ${curr.branch}`;
+            } else {
+                consoleVerEl.textContent = "PZ Estable";
+            }
+        }
 
         // Actualizar Tarjetas de Métricas
         if (document.getElementById("val-cpu")) document.getElementById("val-cpu").textContent = `${curr.cpu_percent}%`;

@@ -812,6 +812,10 @@ def test_public_address_and_ui_flags(auth_client):
 
         with patch.object(process_manager, "is_installed", return_value=True), \
              patch.object(process_manager, "get_status", return_value="OFFLINE"):
+            process_manager.parse_console_line("LOG  : General      f:0 st:1,547,524,709> version=42.22.2 3d39148846")
+            assert process_manager.get_pz_version() == "42.22.2"
+            assert auth_client.get("/api/status").json()["pz_version"] == "42.22.2"
+            assert auth_client.get("/api/metrics").json()["current"]["pz_version"] == "42.22.2"
             orig_setup = settings.runtime_config.get("setup_completed")
             settings.save_runtime_config({"setup_completed": True})
             try:
@@ -820,6 +824,7 @@ def test_public_address_and_ui_flags(auth_client):
                 assert 'style="display: none;"' in html
                 assert 'id="btn-server-stop" class="btn btn-warning" onclick="stopServer()" title="Detener Servidor" disabled' in html
                 assert "survivors.gl.at.ply.gg:16299" in html
+                assert "PZ v42.22.2" in html
                 from app.config import APP_VERSION, get_app_version
                 assert f"v{APP_VERSION}" in html
                 assert f"?v={APP_VERSION}" in html

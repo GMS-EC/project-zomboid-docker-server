@@ -139,6 +139,8 @@ def _augment_metrics(metrics: dict, include_players: bool = False) -> dict:
         m["public_address"] = settings.public_address
         m["is_installed"] = process_manager.is_installed()
         m["is_setup_done"] = settings.is_setup_done
+        m["pz_version"] = process_manager.get_pz_version()
+        m["branch"] = settings.branch
     if process_manager.status == "INSTALLING":
         m["install_progress"] = process_manager.install_progress
     return m
@@ -247,6 +249,7 @@ async def dashboard(request: Request):
             "memory_min": settings.memory_min,
             "memory_max": settings.memory_max,
             "branch": settings.branch,
+            "pz_version": process_manager.get_pz_version(),
             "panel_version": app.version,
             "asset_v": START_TIME_TOKEN,
         },
@@ -437,6 +440,8 @@ async def api_status():
         "steam_mode": settings.use_steam,
         "server_port": settings.server_port,
         "public_address": settings.public_address,
+        "pz_version": process_manager.get_pz_version(),
+        "branch": settings.branch,
         "players_online": metrics.get("players_online", 0),
         "max_players": settings.max_players,
         "metrics": metrics,
