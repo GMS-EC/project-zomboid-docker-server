@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import base64
 import ipaddress
+import secrets
 import time
 from typing import Optional, Dict, Any, Tuple, Set
 from fastapi import Request, HTTPException, status
@@ -143,9 +144,10 @@ def get_client_ip(request: Request) -> str:
 
 
 def create_session_token(username: str = "admin") -> str:
-    """Genera un token de sesión criptográficamente firmado."""
+    """Genera un token de sesión criptográficamente firmado con nonce único."""
     issued_at = int(time.time())
-    payload = f"{username}:{issued_at}"
+    nonce = secrets.token_hex(8)
+    payload = f"{username}:{issued_at}:{nonce}"
     sig = hmac.new(settings.secret_key.encode(), payload.encode(), hashlib.sha256).hexdigest()
     raw = f"{payload}:{sig}"
     return base64.urlsafe_b64encode(raw.encode()).decode()
@@ -158,15 +160,20 @@ def verify_session_token(token: str) -> Optional[str]:
     try:
         raw = base64.urlsafe_b64decode(token.encode()).decode()
         parts = raw.split(":")
-        if len(parts) != 3:
+        if len(parts) == 4:
+            username, issued_at_str, nonce, signature = parts
+            payload = f"{username}:{issued_at_str}:{nonce}"
+        elif len(parts) == 3:
+            username, issued_at_str, signature = parts
+            payload = f"{username}:{issued_at_str}"
+        else:
             return None
-        username, issued_at_str, signature = parts
         issued_at = int(issued_at_str)
         if time.time() - issued_at > SESSION_DURATION_SECONDS:
             return None
         expected_sig = hmac.new(
             settings.secret_key.encode(),
-            f"{username}:{issued_at_str}".encode(),
+            payload.encode(),
             hashlib.sha256,
         ).hexdigest()
         if hmac.compare_digest(expected_sig, signature):

@@ -3,7 +3,7 @@
    ========================================================================== */
 
 const _filesEscapeHtml = (str) => (window.escapeHtml ? window.escapeHtml(str) : String(str ?? ""));
-const _filesJsStr = (str) => (window.attrJsStr ? window.attrJsStr(str) : _filesEscapeHtml(String(str ?? "")));
+const _filesJsStr = (str) => _filesEscapeHtml(JSON.stringify(String(str ?? "")));
 
 const Files = {
   currentPath: "",

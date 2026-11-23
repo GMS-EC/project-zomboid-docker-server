@@ -1207,6 +1207,7 @@ class PzSettingsManager:
                 "server_port": settings.server_port,
                 "direct_port": settings.direct_port,
                 "rcon_port": settings.rcon_port,
+                "public_address": settings.public_address,
                 "disk_limit_gb": settings.disk_limit_gb,
             },
             "raw_ini": self.get_raw_ini(),
@@ -1242,6 +1243,8 @@ class PzSettingsManager:
                 panel_updates["branch"] = str(panel_vals["branch"]).strip()
             if "additional_args" in panel_vals:
                 panel_updates["additional_args"] = str(panel_vals["additional_args"]).strip()
+            if "public_address" in panel_vals:
+                panel_updates["public_address"] = str(panel_vals["public_address"] or "").strip()
             if "disk_limit_gb" in panel_vals:
                 try:
                     panel_updates["disk_limit_gb"] = max(0.0, float(panel_vals["disk_limit_gb"] or 0))
@@ -1280,6 +1283,9 @@ class PzSettingsManager:
             server_vals = dict(server_vals)
             server_vals["WorkshopItems"] = ""
             server_vals["Mods"] = ""
+            server_vals["Public"] = "false"
+            server_vals["SteamVAC"] = "false"
+            server_vals["SteamScoreboard"] = "false"
 
         ini_ok = True
         if server_vals:

@@ -9,7 +9,12 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82V9a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </span>
         <div>
-          <h2 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #f0f6fc;">Ajustes del Servidor &amp; Sandbox de Project Zomboid</h2>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <h2 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #f0f6fc;">Ajustes del Servidor &amp; Sandbox de Project Zomboid</h2>
+            <span id="settings-mode-badge" class="badge" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 999px; {% if steam_mode %}background: rgba(56, 139, 253, 0.14); color: #79c0ff; border: 1px solid rgba(56, 139, 253, 0.35);{% else %}background: rgba(210, 153, 34, 0.14); color: #e3b341; border: 1px solid rgba(210, 153, 34, 0.35);{% endif %}">
+              {% if steam_mode %}Versión: Steam (Workshop + VAC){% else %}Versión: No-Steam / GOG (-nosteam){% endif %}
+            </span>
+          </div>
           <p style="margin: 2px 0 0 0; color: var(--text-dim); font-size: 0.82rem;">
             Todas las opciones del juego se persisten en <code>Server/{{ server_name }}.ini</code> y <code>SandboxVars.lua</code> dentro del contenedor.
           </p>
@@ -90,6 +95,12 @@
     </div>
   </div>
 
+  <!-- Aviso de opciones según modo Steam / No-Steam (GOG) -->
+  <div id="settings-nosteam-notice" style="{% if steam_mode %}display: none;{% else %}display: flex;{% endif %} align-items: center; gap: 10px; padding: 10px 24px; background: rgba(210, 153, 34, 0.1); border-bottom: 1px solid rgba(210, 153, 34, 0.3); color: #e3b341; font-size: 0.8rem;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>Modo <strong>No-Steam / GOG (-nosteam)</strong> activo: se ocultan las opciones exclusivas de Steam (Buscador público <code>Public</code>, <code>SteamVAC</code>, <code>SteamScoreboard</code> y Steam Workshop).</span>
+  </div>
+
   <!-- Contenido de las Secciones -->
   <div style="padding: 24px;">
 
@@ -120,9 +131,9 @@
           <input type="number" id="cfg-MaxPlayers" class="form-input" min="1" max="100" value="16">
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="cfg-Public">Publicar en Buscador Oficial (Public)</label>
-          <select id="cfg-Public" class="form-select">
+        <div class="form-group steam-only-setting" {% if not steam_mode %}style="display: none;"{% endif %}>
+          <label class="form-label" for="cfg-Public">Publicar en Buscador Oficial de Steam (Public)</label>
+          <select id="cfg-Public" class="form-select" {% if not steam_mode %}disabled{% endif %}>
             <option value="true">Público</option>
             <option value="false" selected>Privado (Solo IP/Puerto)</option>
           </select>
@@ -202,6 +213,12 @@
         <div class="form-group">
           <label class="form-label" for="cfg-RCONPassword">Contraseña RCON (Opcional)</label>
           <input type="text" id="cfg-RCONPassword" class="form-input" placeholder="Vacío = Desactivado">
+        </div>
+
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label class="form-label" for="cfg-panel-public_address">Dirección Pública IP:Puerto (Playit.gg / VPN / Dominio)</label>
+          <input type="text" id="cfg-panel-public_address" class="form-input" placeholder="ej: agent-ejemplo.gl.at.ply.gg:12345 (vacío = usar host actual + DefaultPort)">
+          <small style="color: var(--text-dim); font-size: 0.72rem;">Se muestra en el banner superior y se copia al pulsar el botón <strong>IP:Puerto</strong>.</small>
         </div>
 
         <div class="form-group" style="grid-column: 1 / -1;">
@@ -377,9 +394,9 @@
           </select>
         </div>
 
-        <div class="form-group">
+        <div class="form-group steam-only-setting" {% if not steam_mode %}style="display: none;"{% endif %}>
           <label class="form-label" for="cfg-SteamVAC">Protección Anti-Cheat de Valve (SteamVAC)</label>
-          <select id="cfg-SteamVAC" class="form-select">
+          <select id="cfg-SteamVAC" class="form-select" {% if not steam_mode %}disabled{% endif %}>
             <option value="true" selected>Activado (Bloquea usuarios con VAC ban)</option>
             <option value="false">Desactivado</option>
           </select>
@@ -417,9 +434,9 @@
           </select>
         </div>
 
-        <div class="form-group">
+        <div class="form-group steam-only-setting" {% if not steam_mode %}style="display: none;"{% endif %}>
           <label class="form-label" for="cfg-SteamScoreboard">Tabla de Puntuación de Steam (SteamScoreboard)</label>
-          <select id="cfg-SteamScoreboard" class="form-select">
+          <select id="cfg-SteamScoreboard" class="form-select" {% if not steam_mode %}disabled{% endif %}>
             <option value="true" selected>Activado</option>
             <option value="false">Desactivado</option>
           </select>
@@ -1362,9 +1379,9 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="cfg-panel-use_steam">Modo de Red</label>
-          <select id="cfg-panel-use_steam" class="form-select">
-            <option value="true" selected>Steam (Workshop automática)</option>
+          <label class="form-label" for="cfg-panel-use_steam">Versión / Modo de Red</label>
+          <select id="cfg-panel-use_steam" class="form-select" onchange="applySteamModeUI(this.value === 'true')">
+            <option value="true" selected>Steam (Workshop, VAC y buscador público)</option>
             <option value="false">No-Steam / GOG (-nosteam)</option>
           </select>
         </div>
@@ -1392,7 +1409,7 @@
 
         <div class="form-group" style="grid-column: 1 / -1;">
           <label class="form-label" for="cfg-panel-additional_args">Argumentos Adicionales de Línea de Comandos</label>
-          <input type="text" id="cfg-panel-additional_args" class="form-input" placeholder="ej: -steamvac false">
+          <input type="text" id="cfg-panel-additional_args" class="form-input" placeholder="ej: -debug">
         </div>
       </div>
 

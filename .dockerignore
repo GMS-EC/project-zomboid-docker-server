@@ -27,9 +27,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Markdown documentation (no se copia nada en el build)
+# Markdown documentation (CHANGELOG.md sí se incluye para detectar la versión)
 README.md
-CHANGELOG.md
 CONTRIBUTING.md
 Documents/*
 

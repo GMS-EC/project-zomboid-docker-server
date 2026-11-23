@@ -1,0 +1,132 @@
+<!-- TAB: PORTADA PÚBLICA DEL SERVIDOR -->
+<div class="card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); background: var(--bg-surface);">
+  <!-- Encabezado y Acciones -->
+  <div style="padding: 20px 24px; border-bottom: 1px solid var(--border-color); background: var(--bg-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: rgba(60, 163, 116, 0.14); color: #3fb950; border: 1px solid rgba(60, 163, 116, 0.35);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </span>
+      <div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h2 style="margin: 0; font-size: 1.2rem; font-weight: 700; color: #f0f6fc;">Portada Pública del Servidor</h2>
+          <span id="portal-status-pill" class="badge" style="font-size: 0.72rem; padding: 3px 9px; border-radius: 999px; background: rgba(60, 163, 116, 0.16); color: #7ee2b4; border: 1px solid rgba(60, 163, 116, 0.35);">Habilitada</span>
+        </div>
+        <p style="margin: 2px 0 0 0; color: var(--text-dim); font-size: 0.82rem;">
+          Personaliza la apariencia, anuncios, etiquetas y normas de la portada que ven los jugadores al entrar.
+        </p>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+      <a href="/portal" target="_blank" rel="noopener noreferrer" class="btn btn-outline" style="padding: 7px 14px; font-size: 0.82rem; text-decoration: none;">
+        Vista Previa
+      </a>
+      <button type="button" class="btn btn-primary" onclick="Portal.saveConfig()" style="padding: 7px 18px; font-size: 0.84rem; font-weight: 600;">
+        Guardar Portada
+      </button>
+    </div>
+  </div>
+
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+    <!-- Switch Habilitar / Deshabilitar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 18px; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(13, 17, 23, 0.45); flex-wrap: wrap;">
+      <div>
+        <strong style="color: #f0f6fc; font-size: 0.94rem;">Mostrar página principal pública</strong>
+        <p style="margin: 4px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">
+          Activa la portada informativa al entrar en <code>/</code> con el acceso de administración abajo. Si la desactivas, solo se mostrará el inicio de sesión.
+        </p>
+      </div>
+      <label class="portal-switch" title="Habilitar o deshabilitar portada pública">
+        <input type="checkbox" id="portal-landing-enabled" checked onchange="Portal.onToggleEnabled()">
+        <span class="portal-switch-slider"></span>
+      </label>
+    </div>
+
+    <!-- Resumen automático desde Ajustes / .ini -->
+    <div style="padding: 14px 18px; border: 1px solid rgba(56, 139, 253, 0.25); border-radius: 8px; background: rgba(56, 139, 253, 0.06);">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
+        <span style="font-size: 0.78rem; font-weight: 600; color: #79c0ff;">
+          Información sincronizada automáticamente desde el servidor (Ajustes y .ini)
+        </span>
+        <button type="button" class="btn btn-outline" onclick="switchTab('settings')" style="padding: 3px 10px; font-size: 0.74rem;">
+          Editar en Ajustes
+        </button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 0.82rem;">
+        <div><span style="color: var(--text-dim);">Servidor:</span> <strong id="portal-live-server-name" style="color: #f0f6fc;">{{ server_name }}</strong></div>
+        <div><span style="color: var(--text-dim);">IP / Puerto:</span> <code id="portal-live-address" style="color: #7ee2b4;">{{ public_address if public_address else server_port ~ " (UDP)" }}</code></div>
+        <div><span style="color: var(--text-dim);">Capacidad:</span> <strong id="portal-live-players" style="color: #f0f6fc;">{{ max_players }} jugadores</strong></div>
+      </div>
+      <div style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted);">
+        <span style="color: var(--text-dim);">Descripción (.ini):</span> <span id="portal-live-description">—</span>
+      </div>
+    </div>
+
+    <!-- Opciones exclusivas de diseño y comunidad -->
+    <div id="portal-editor-fields" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-accent">Estilo / Color de Acento</label>
+        <select id="portal-landing-accent" class="form-select">
+          <option value="emerald" selected>Verde Superviviente (Clásico PZ)</option>
+          <option value="amber">Ámbar Apocalipsis (Alerta / Cuarentena)</option>
+          <option value="crimson">Carmesí Horda (Hardcore)</option>
+          <option value="cyan">Azul Nocturno (Refugio)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-subtitle">Eslogan o Subtítulo</label>
+        <input type="text" id="portal-landing-subtitle" class="form-input" placeholder="Servidor Dedicado de Project Zomboid">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-discord-url">Enlace de Discord / Comunidad (Opcional)</label>
+        <input type="url" id="portal-landing-discord-url" class="form-input" placeholder="https://discord.gg/tu-comunidad">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-mods-note">Nota de Mods o Conexión</label>
+        <input type="text" id="portal-landing-mods-note" class="form-input" placeholder="ej: Descarga automática por Workshop al entrar">
+      </div>
+
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label class="form-label" for="portal-landing-announcement">Aviso Destacado / Temporada (Opcional)</label>
+        <input type="text" id="portal-landing-announcement" class="form-input" placeholder="ej: Temporada 3 activa — Wipe recién realizado. Evento el sábado a las 20:00.">
+      </div>
+
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label class="form-label" for="portal-landing-tags">Etiquetas del Servidor (separadas por coma)</label>
+        <input type="text" id="portal-landing-tags" class="form-input" placeholder="ej: 24/7, Hispanohablante, XP x2, Eventos PvE">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-show-players">Contador de Jugadores</label>
+        <select id="portal-landing-show-players" class="form-select">
+          <option value="true" selected>Mostrar conectados (ej. 4 de 16)</option>
+          <option value="false">Ocultar contador en vivo</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-show-online-names">Supervivientes Conectados en Vivo</label>
+        <select id="portal-landing-show-online-names" class="form-select">
+          <option value="true">Mostrar nombres conectados</option>
+          <option value="false" selected>Ocultar nombres (privacidad)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="portal-landing-show-rules">Bloque de Normas y Guía</label>
+        <select id="portal-landing-show-rules" class="form-select">
+          <option value="true" selected>Visible en portada</option>
+          <option value="false">Oculto</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label class="form-label" for="portal-landing-rules">Reglas del Servidor (una por línea)</label>
+        <textarea id="portal-landing-rules" class="form-input" rows="5" placeholder="Respeto entre supervivientes&#10;No robar ni destruir refugios protegidos&#10;Reportar fallos o abusos en Discord"></textarea>
+      </div>
+    </div>
+  </div>
+</div>

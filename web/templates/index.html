@@ -59,7 +59,12 @@
           {% include "tabs/webhooks.html" %}
         </section>
 
-        <!-- Tab 10: Configuración -->
+        <!-- Tab 10: Portada Pública -->
+        <section id="tab-portal" class="tab-pane">
+          {% include "tabs/portal.html" %}
+        </section>
+
+        <!-- Tab 11: Configuración -->
         <section id="tab-settings" class="tab-pane">
           {% include "tabs/settings.html" %}
         </section>
@@ -75,10 +80,10 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="/static/js/app.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
-  <script src="/static/js/files.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
-  <script src="/static/js/logs.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
-  <script src="/static/js/tasks.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
-  <script src="/static/js/backups.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
-  <script src="/static/js/webhooks.js?v={{ panel_version | default('0.3.0') }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/app.js?v={{ panel_version }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/files.js?v={{ panel_version }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/logs.js?v={{ panel_version }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/tasks.js?v={{ panel_version }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/backups.js?v={{ panel_version }}&_t={{ asset_v | default('1') }}"></script>
+  <script src="/static/js/webhooks.js?v={{ panel_version }}&_t={{ asset_v | default('1') }}"></script>
 {% endblock %}

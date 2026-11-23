@@ -1,10 +1,37 @@
 import os
+import re
 import json
 import secrets
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def get_app_version(changelog_path: Optional[Path] = None, fallback: str = "0.1.0-dev") -> str:
+    """Extrae automáticamente la versión más reciente desde CHANGELOG.md."""
+    path = changelog_path or (BASE_DIR / "CHANGELOG.md")
+    if not path.is_file():
+        return fallback
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("## "):
+                continue
+            m = re.search(r"\[(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\]", stripped)
+            if m:
+                return m.group(1)
+            m_dev = re.search(r"\((\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\)", stripped)
+            if m_dev:
+                return m_dev.group(1)
+            if "unreleased" in stripped.lower():
+                return fallback
+    except Exception:
+        pass
+    return fallback
+
+
+APP_VERSION: str = get_app_version()
 
 # Detecta ejecución dentro de Docker (/home/steam) frente a desarrollo local
 _IN_CONTAINER = Path("/home/steam").is_dir()
@@ -85,7 +112,19 @@ class Settings:
         self._rcon_port: int = 27015
         self._server_port: int = 16261
         self._direct_port: int = 16262
+        self._public_address: str = os.getenv("PZ_PUBLIC_ADDRESS", "").strip()
         self._disk_limit_gb: float = 0.0
+        self._landing_enabled: bool = True
+        self._landing_accent: str = "emerald"
+        self._landing_subtitle: str = "Servidor Dedicado de Project Zomboid"
+        self._landing_announcement: str = ""
+        self._landing_tags: str = ""
+        self._landing_rules: str = ""
+        self._landing_mods_note: str = ""
+        self._landing_discord_url: str = ""
+        self._landing_show_players: bool = True
+        self._landing_show_online_names: bool = False
+        self._landing_show_rules: bool = True
 
         # Campos de presentación usados por el frontend
         self.world_label: str = "Knox County"
@@ -211,6 +250,56 @@ class Settings:
             return float(self._rt("disk_limit_gb", self._disk_limit_gb) or 0.0)
         except (TypeError, ValueError):
             return self._disk_limit_gb
+
+    @property
+    def public_address(self) -> str:
+        return str(self._rt("public_address", self._public_address) or "").strip()
+
+    @property
+    def landing_enabled(self) -> bool:
+        return self._rt_bool(self._rt("landing_enabled"), self._landing_enabled)
+
+    @property
+    def landing_accent(self) -> str:
+        val = str(self._rt("landing_accent", self._landing_accent) or "emerald").strip().lower()
+        return val if val in ("emerald", "amber", "crimson", "cyan") else "emerald"
+
+    @property
+    def landing_subtitle(self) -> str:
+        return str(self._rt("landing_subtitle", self._landing_subtitle) or "").strip()
+
+    @property
+    def landing_announcement(self) -> str:
+        return str(self._rt("landing_announcement", self._landing_announcement) or "").strip()
+
+    @property
+    def landing_tags(self) -> str:
+        return str(self._rt("landing_tags", self._landing_tags) or "").strip()
+
+    @property
+    def landing_rules(self) -> str:
+        return str(self._rt("landing_rules", self._landing_rules) or "").strip()
+
+    @property
+    def landing_mods_note(self) -> str:
+        return str(self._rt("landing_mods_note", self._landing_mods_note) or "").strip()
+
+    @property
+    def landing_discord_url(self) -> str:
+        url = str(self._rt("landing_discord_url", self._landing_discord_url) or "").strip()
+        return url if url.startswith(("http://", "https://")) else ""
+
+    @property
+    def landing_show_players(self) -> bool:
+        return self._rt_bool(self._rt("landing_show_players"), self._landing_show_players)
+
+    @property
+    def landing_show_online_names(self) -> bool:
+        return self._rt_bool(self._rt("landing_show_online_names"), self._landing_show_online_names)
+
+    @property
+    def landing_show_rules(self) -> bool:
+        return self._rt_bool(self._rt("landing_show_rules"), self._landing_show_rules)
 
     def save_wizard(self, payload: dict) -> None:
         updates = {}

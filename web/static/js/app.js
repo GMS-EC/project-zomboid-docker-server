@@ -176,6 +176,10 @@ function switchTab(tabId) {
         Webhooks.loadConfig();
     }
 
+    if (tabId === "portal") {
+        Portal.loadConfig();
+    }
+
     if (tabId === "mods") {
         loadMods();
     }
@@ -196,6 +200,102 @@ function switchTab(tabId) {
         }
     }
 }
+
+// --- Portada Pública del Servidor ---
+const Portal = {
+    async loadConfig() {
+        try {
+            const res = await fetch("/api/portal");
+            const data = await window.readApiJson(res);
+            const setVal = (id, v) => {
+                const el = document.getElementById(id);
+                if (el && v !== undefined && v !== null) el.value = String(v);
+            };
+            const enabledEl = document.getElementById("portal-landing-enabled");
+            if (enabledEl) enabledEl.checked = data.landing_enabled !== false;
+            setVal("portal-landing-accent", data.landing_accent || "emerald");
+            setVal("portal-landing-subtitle", data.landing_subtitle || "");
+            setVal("portal-landing-announcement", data.landing_announcement || "");
+            setVal("portal-landing-tags", data.landing_tags || "");
+            setVal("portal-landing-discord-url", data.landing_discord_url || "");
+            setVal("portal-landing-mods-note", data.landing_mods_note || "");
+            setVal("portal-landing-show-players", data.landing_show_players !== false ? "true" : "false");
+            setVal("portal-landing-show-online-names", data.landing_show_online_names ? "true" : "false");
+            setVal("portal-landing-show-rules", data.landing_show_rules !== false ? "true" : "false");
+            setVal("portal-landing-rules", data.landing_rules || "");
+
+            const liveName = document.getElementById("portal-live-server-name");
+            const liveAddr = document.getElementById("portal-live-address");
+            const livePlayers = document.getElementById("portal-live-players");
+            const liveDesc = document.getElementById("portal-live-description");
+            const effName = data.public_name || data.server_name || "servertest";
+            if (liveName) liveName.textContent = data.public_name && data.public_name !== data.server_name ? `${data.public_name} (${data.server_name})` : effName;
+            if (liveAddr) liveAddr.textContent = data.public_address || `${window.location.hostname || "localhost"}:${data.server_port || 16261} (UDP ${data.direct_port || 16262})`;
+            if (livePlayers) livePlayers.textContent = `${data.max_players || 16} jugadores`;
+            if (liveDesc) liveDesc.textContent = data.public_description || "Sin descripción definida en Ajustes (.ini)";
+
+            this.onToggleEnabled();
+        } catch (e) {
+            console.error("Error cargando configuración de portada:", e);
+        }
+    },
+
+    onToggleEnabled() {
+        const enabledEl = document.getElementById("portal-landing-enabled");
+        const pill = document.getElementById("portal-status-pill");
+        const fields = document.getElementById("portal-editor-fields");
+        const isEnabled = enabledEl ? enabledEl.checked : true;
+        if (pill) {
+            pill.textContent = isEnabled ? "Habilitada" : "Deshabilitada (solo login)";
+            pill.style.background = isEnabled ? "rgba(60, 163, 116, 0.16)" : "rgba(139, 148, 158, 0.14)";
+            pill.style.color = isEnabled ? "#7ee2b4" : "#8b949e";
+            pill.style.borderColor = isEnabled ? "rgba(60, 163, 116, 0.35)" : "rgba(139, 148, 158, 0.3)";
+        }
+        if (fields) {
+            fields.style.opacity = isEnabled ? "1" : "0.65";
+        }
+    },
+
+    async saveConfig() {
+        const getVal = (id) => {
+            const el = document.getElementById(id);
+            return el ? el.value : "";
+        };
+        const enabledEl = document.getElementById("portal-landing-enabled");
+        const payload = {
+            landing_enabled: enabledEl ? enabledEl.checked : true,
+            landing_accent: getVal("portal-landing-accent") || "emerald",
+            landing_subtitle: getVal("portal-landing-subtitle"),
+            landing_announcement: getVal("portal-landing-announcement"),
+            landing_tags: getVal("portal-landing-tags"),
+            landing_discord_url: getVal("portal-landing-discord-url"),
+            landing_mods_note: getVal("portal-landing-mods-note"),
+            landing_show_players: getVal("portal-landing-show-players") !== "false",
+            landing_show_online_names: getVal("portal-landing-show-online-names") === "true",
+            landing_show_rules: getVal("portal-landing-show-rules") !== "false",
+            landing_rules: getVal("portal-landing-rules"),
+        };
+
+        try {
+            const res = await fetch("/api/portal", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const data = await window.readApiJson(res);
+            if (data.success) {
+                showToast("Portada pública guardada correctamente.", "success");
+                this.loadConfig();
+                loadSettings();
+                fetchMetricsOnce();
+            } else {
+                showToast("No se pudo guardar la portada.", "error");
+            }
+        } catch (e) {
+            showToast("Error de conexión al guardar la portada.", "error");
+        }
+    },
+};
 
 // --- WebSocket de Consola ---
 let ws = null;
@@ -283,29 +383,6 @@ function initWebSocket() {
     };
 }
 
-function sendQuickCommand(cmd) {
-    const input = document.getElementById("console-input");
-    if (input) {
-        input.value = cmd;
-        sendConsoleCommand();
-    }
-}
-
-async function triggerCreateHorde() {
-    const raw = await App.prompt({
-        title: "Generar Horda (createhorde)",
-        message: "Indica cantidad y opcionalmente nombre del jugador (ej: 50 o 50 RickGrimes):",
-        defaultValue: "50",
-        confirmText: "Generar Horda"
-    });
-    if (!raw || !raw.trim()) return;
-    const parts = raw.trim().split(/\s+/);
-    const count = Math.max(1, Math.min(500, parseInt(parts[0], 10) || 50));
-    const target = parts.slice(1).join(" ").replace(/["']/g, "");
-    const cmd = target ? `createhorde ${count} "${target}"` : `createhorde ${count}`;
-    sendQuickCommand(cmd);
-}
-
 function toggleAutoScroll() {
     const consoleOutput = document.getElementById("console-output");
     isAutoScroll = !isAutoScroll;
@@ -327,10 +404,91 @@ function toggleAutoScroll() {
     }
 }
 
+const PZ_CONSOLE_COMMANDS = {
+    players: { template: "players", desc: "Muestra la lista de supervivientes conectados actualmente." },
+    servermsg: { template: 'servermsg "<mensaje>"', desc: "Envía un anuncio global visible en pantalla para todos los jugadores." },
+    kickuser: { template: 'kickuser "<usuario>" -r "<razón>"', desc: "Expulsa a un jugador conectado indicando una razón opcional." },
+    banuser: { template: 'banuser "<usuario>" -ip -r "<razón>"', desc: "Banea al jugador por cuenta y opcionalmente por IP (-ip)." },
+    unbanuser: { template: 'unbanuser "<usuario>"', desc: "Revoca el baneo de una cuenta de jugador." },
+    setaccesslevel: { template: 'setaccesslevel "<usuario>" <admin|moderator|gm|observer|none>', desc: "Asigna o quita el nivel de acceso/rol dentro del servidor." },
+    adduser: { template: 'adduser "<usuario>" "<clave>"', desc: "Crea manualmente una cuenta de usuario en la base de datos del servidor." },
+    addalltowhitelist: { template: "addalltowhitelist", desc: "Añade a la whitelist a todos los jugadores conectados en este momento." },
+    addusertowhitelist: { template: 'addusertowhitelist "<usuario>"', desc: "Autoriza a un usuario específico en la whitelist del servidor." },
+    removeuserfromwhitelist: { template: 'removeuserfromwhitelist "<usuario>"', desc: "Elimina a un usuario de la whitelist del servidor." },
+    teleport: { template: 'teleport "<usuario_origen>" "<usuario_destino>"', desc: "Teletransporta al primer jugador hacia la posición del segundo." },
+    teleportto: { template: "teleportto <x>,<y>,<z>", desc: "Teletransporta al administrador a las coordenadas indicadas del mapa." },
+    godmod: { template: 'godmod "<usuario>" -true', desc: "Activa (-true) o desactiva (-false) la invulnerabilidad para un jugador." },
+    invisible: { template: 'invisible "<usuario>" -true', desc: "Vuelve invisible (-true) o visible (-false) al jugador frente a zombis." },
+    noclip: { template: 'noclip "<usuario>" -true', desc: "Permite (-true) atravesar paredes y moverse sin colisiones." },
+    additem: { template: 'additem "<usuario>" <Base.Katana> 1', desc: "Entrega un ítem del juego al inventario del jugador (ej. Base.Axe)." },
+    addxp: { template: 'addxp "<usuario>" <Carpentry=500>', desc: "Suma puntos de experiencia a una habilidad (Carpentry, Aiming, Mechanics...)." },
+    addvehicle: { template: 'addvehicle <Base.CarNormal> "<usuario>"', desc: "Genera un vehículo junto al jugador indicado." },
+    startrain: { template: "startrain <50>", desc: "Inicia lluvia en el servidor; puedes indicar intensidad opcional (1-100)." },
+    stoprain: { template: "stoprain", desc: "Detiene la lluvia actual y despeja el clima." },
+    chopper: { template: "chopper", desc: "Activa el evento de helicóptero sobre un jugador aleatorio." },
+    gunshot: { template: "gunshot", desc: "Reproduce un sonido de disparo lejano para mover zombis en la zona." },
+    alarm: { template: "alarm", desc: "Dispara la alarma de un edificio cercano a los jugadores." },
+    lightning: { template: 'lightning "<usuario>"', desc: "Hace caer un rayo cerca de la posición del jugador indicado." },
+    thunder: { template: 'thunder "<usuario>"', desc: "Reproduce un trueno en la posición del jugador indicado." },
+    createhorde: { template: 'createhorde <50> "<usuario>"', desc: "Genera una horda de N zombis alrededor del jugador indicado." },
+    save: { template: "save", desc: "Fuerza el guardado inmediato del estado del mundo en disco." },
+    reloadoptions: { template: "reloadoptions", desc: "Recarga los ajustes de Server.ini sin necesidad de reiniciar." },
+    showoptions: { template: "showoptions", desc: "Imprime en consola las opciones activas del archivo Server.ini." },
+    changeoption: { template: 'changeoption <Clave> "<Valor>"', desc: "Modifica en caliente una clave de configuración de Server.ini." },
+    checkModsNeedUpdate: { template: "checkModsNeedUpdate", desc: "Comprueba si existen actualizaciones pendientes en los mods de Workshop." },
+    help: { template: "help", desc: "Lista en consola los comandos nativos soportados por el servidor PZ." },
+    quit: { template: "quit", desc: "Guarda el mundo y detiene el proceso del servidor de forma segura." }
+};
+
+function updateConsoleCommandHint(rawVal) {
+    const box = document.getElementById("console-cmd-hint");
+    const syntaxEl = document.getElementById("console-cmd-hint-syntax");
+    const descEl = document.getElementById("console-cmd-hint-desc");
+    if (!box || !syntaxEl || !descEl) return;
+
+    const token = String(rawVal || "").trim().split(/\s+/)[0];
+    const entry = PZ_CONSOLE_COMMANDS[token] || Object.entries(PZ_CONSOLE_COMMANDS).find(([k]) => k.toLowerCase() === token.toLowerCase())?.[1];
+    if (!entry) {
+        box.style.display = "none";
+        return;
+    }
+    syntaxEl.textContent = entry.template;
+    descEl.textContent = entry.desc;
+    box.style.display = "flex";
+}
+
+function clearConsoleCommandHint() {
+    const box = document.getElementById("console-cmd-hint");
+    if (box) box.style.display = "none";
+}
+
+function applyConsoleCommandTemplate(cmdKey) {
+    const select = document.getElementById("console-cmd-preset");
+    const input = document.getElementById("console-input");
+    const entry = PZ_CONSOLE_COMMANDS[cmdKey];
+    if (!entry || !input) return;
+
+    input.value = entry.template;
+    updateConsoleCommandHint(cmdKey);
+    input.focus();
+
+    // Selecciona el primer marcador <...> para agilizar la edición sin borrar el resto
+    const start = entry.template.indexOf("<");
+    const end = entry.template.indexOf(">", start + 1);
+    if (start !== -1 && end !== -1) {
+        input.setSelectionRange(start, end + 1);
+    } else {
+        input.setSelectionRange(entry.template.length, entry.template.length);
+    }
+    if (select) select.value = "";
+}
+
 function initConsoleHistory() {
     const input = document.getElementById("console-input");
     if (!input || input.dataset.historyBound) return;
     input.dataset.historyBound = "true";
+
+    input.addEventListener("input", () => updateConsoleCommandHint(input.value));
 
     input.addEventListener("keydown", (e) => {
         if (e.key === "ArrowUp") {
@@ -343,6 +501,7 @@ function initConsoleHistory() {
                 cmdHistoryIndex++;
                 input.value = commandHistory[commandHistory.length - 1 - cmdHistoryIndex];
                 input.setSelectionRange(input.value.length, input.value.length);
+                updateConsoleCommandHint(input.value);
             }
         } else if (e.key === "ArrowDown") {
             if (cmdHistoryIndex > 0) {
@@ -350,29 +509,66 @@ function initConsoleHistory() {
                 cmdHistoryIndex--;
                 input.value = commandHistory[commandHistory.length - 1 - cmdHistoryIndex];
                 input.setSelectionRange(input.value.length, input.value.length);
+                updateConsoleCommandHint(input.value);
             } else if (cmdHistoryIndex === 0) {
                 e.preventDefault();
                 cmdHistoryIndex = -1;
                 input.value = cmdDraft;
+                updateConsoleCommandHint(input.value);
             }
         }
     });
 }
 
+async function copyTextToClipboard(text) {
+    if (!text) return false;
+    if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (e) { /* usar fallback textarea */ }
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try {
+        ok = document.execCommand("copy");
+    } catch (e) {
+        ok = false;
+    }
+    document.body.removeChild(ta);
+    return ok;
+}
+
 async function copyServerAddress() {
     let port = 16261;
+    let publicAddr = (cachedSettingsData && cachedSettingsData.panel && cachedSettingsData.panel.public_address) || "";
     try {
         const res = await fetch("/api/settings");
         const data = await res.json();
-        port = (data.network && data.network.server_port) || 16261;
-    } catch (e) { /* puerto por defecto */ }
+        cachedSettingsData = data;
+        if (data.panel && data.panel.public_address) {
+            publicAddr = String(data.panel.public_address).trim();
+        } else {
+            publicAddr = "";
+        }
+        port = (data.server && data.server.DefaultPort) || (data.panel && data.panel.server_port) || 16261;
+    } catch (e) { /* usar valores en caché o por defecto */ }
+
     const host = window.location.hostname || "127.0.0.1";
-    const link = `${host}:${port}`;
-    try {
-        await navigator.clipboard.writeText(link);
+    const link = publicAddr || `${host}:${port}`;
+    const copied = await copyTextToClipboard(link);
+    if (copied) {
         showToast(`Dirección copiada: ${link}`, "success");
-    } catch (e) {
-        showToast("No se pudo copiar la dirección.", "error");
+    } else {
+        showToast(`No se pudo copiar automáticamente. Usa: ${link}`, "error");
     }
 }
 
@@ -400,20 +596,48 @@ function sendConsoleCommand() {
         });
     }
     input.value = "";
+    clearConsoleCommandHint();
 }
 
 // --- Controles de Servidor (Project Zomboid) ---
+function updateControlButtons(status) {
+    const st = String(status || "OFFLINE").toUpperCase();
+    const btnStart = document.getElementById("btn-server-start");
+    const btnStop = document.getElementById("btn-server-stop");
+    const btnRestart = document.getElementById("btn-server-restart");
+    if (btnStart) btnStart.disabled = st !== "OFFLINE";
+    if (btnStop) btnStop.disabled = st !== "RUNNING" && st !== "STARTING";
+    if (btnRestart) btnRestart.disabled = st !== "RUNNING";
+}
+
+function updateInstallerTabVisibility(isInstalled, isSetupDone) {
+    const ready = Boolean(isInstalled && isSetupDone);
+    const btn = document.getElementById("tab-btn-installer");
+    if (btn) btn.style.display = ready ? "none" : "";
+    const instPane = document.getElementById("tab-installer");
+    if (instPane) instPane.dataset.needsSetup = ready ? "false" : "true";
+}
+
 async function startServer() {
     showToast("Iniciando servidor de Project Zomboid...", "info");
-    const res = await fetch("/api/server/start", { method: "POST" });
-    const data = await res.json();
-    if (data.success) {
-        showToast("Servidor de PZ arrancando (estado: " + (data.status || "STARTING") + ").", "success");
-    } else {
-        showToast(data.error || "No se pudo iniciar el servidor.", "error");
-        if (data.is_setup_done === false) {
-            switchTab("installer");
+    updateControlButtons("STARTING");
+    try {
+        const res = await fetch("/api/server/start", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Servidor de PZ arrancando (estado: " + (data.status || "STARTING") + ").", "success");
+            fetchMetricsOnce();
+        } else {
+            showToast(data.error || "No se pudo iniciar el servidor.", "error");
+            updateControlButtons("OFFLINE");
+            if (data.is_setup_done === false) {
+                updateInstallerTabVisibility(false, false);
+                switchTab("installer");
+            }
         }
+    } catch (e) {
+        updateControlButtons("OFFLINE");
+        showToast("Error de conexión al iniciar el servidor.", "error");
     }
 }
 
@@ -426,10 +650,15 @@ async function stopServer() {
     });
     if (!ok) return;
     showToast("Deteniendo servidor (save + quit)...", "info");
-    const res = await fetch("/api/server/stop", { method: "POST" });
-    const data = await res.json();
-    if (data.success) {
-        showToast("Servidor detenido.", "success");
+    updateControlButtons("STOPPING");
+    try {
+        const res = await fetch("/api/server/stop", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+            showToast("Servidor detenido.", "success");
+        }
+    } finally {
+        fetchMetricsOnce();
     }
 }
 
@@ -442,7 +671,12 @@ async function restartServer() {
     });
     if (!ok) return;
     showToast("Reiniciando servidor...", "info");
-    await fetch("/api/server/restart", { method: "POST" });
+    updateControlButtons("STOPPING");
+    try {
+        await fetch("/api/server/restart", { method: "POST" });
+    } finally {
+        fetchMetricsOnce();
+    }
 }
 
 // --- Acciones Rápidas (consola PZ) ---
@@ -540,6 +774,23 @@ function applySteamModeUI(isSteam) {
         });
     }
 
+    const settingsBadge = document.getElementById("settings-mode-badge");
+    if (settingsBadge) {
+        settingsBadge.textContent = enabled ? "Versión: Steam (Workshop + VAC)" : "Versión: No-Steam / GOG (-nosteam)";
+        settingsBadge.style.background = enabled ? "rgba(56, 139, 253, 0.14)" : "rgba(210, 153, 34, 0.14)";
+        settingsBadge.style.color = enabled ? "#79c0ff" : "#e3b341";
+        settingsBadge.style.borderColor = enabled ? "rgba(56, 139, 253, 0.35)" : "rgba(210, 153, 34, 0.35)";
+    }
+    const settingsNotice = document.getElementById("settings-nosteam-notice");
+    if (settingsNotice) settingsNotice.style.display = enabled ? "none" : "flex";
+
+    document.querySelectorAll(".steam-only-setting").forEach(wrapper => {
+        wrapper.style.display = enabled ? "" : "none";
+        wrapper.querySelectorAll("input, select, textarea").forEach(el => {
+            el.disabled = !enabled;
+        });
+    });
+
     if (!enabled && App.activeTab === "mods") {
         switchTab("settings");
     }
@@ -551,8 +802,19 @@ async function fetchMetricsOnce() {
         const data = await res.json();
         const curr = data.current;
         const isOffline = curr.status === "OFFLINE";
+        updateControlButtons(curr.status);
+        if (curr.is_installed !== undefined && curr.is_setup_done !== undefined) {
+            updateInstallerTabVisibility(curr.is_installed, curr.is_setup_done);
+        }
         if (curr.steam_mode !== undefined) {
             applySteamModeUI(curr.steam_mode);
+        }
+        const topPortEl = document.getElementById("top-server-port");
+        const topPortLabel = document.getElementById("top-server-port-label");
+        if (topPortEl && curr.server_port !== undefined) {
+            const pub = String(curr.public_address || "").trim();
+            topPortEl.textContent = pub || `${curr.server_port} (UDP)`;
+            if (topPortLabel) topPortLabel.textContent = pub ? "Dirección Pública:" : "Puerto de Juego:";
         }
 
         // Actualizar Tarjetas de Métricas
@@ -815,7 +1077,7 @@ function renderPlayersList() {
 
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 40px 20px;">
+                <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 40px 20px;">
                     <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
                         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#484f58" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
                         <span style="font-size: 0.88rem; color: #8b949e;">${emptyMsg}</span>
@@ -865,29 +1127,29 @@ function renderPlayersList() {
                 </div>
             </td>
             <td>
-                <div style="display: flex; flex-direction: column; gap: 4px;">
-                    <div class="steam-id-pill">
-                        <span>${escapeHtml(p.steam_id || "Local / N/A")}</span>
-                        ${hasValidSteamId ? `
-                            <button type="button" class="btn-copy-steam" onclick="copySteamId('${attrJsStr(p.steam_id)}')" title="Copiar SteamID al portapapeles">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                            </button>
-                        ` : ''}
-                    </div>
-                    <select class="form-input" style="padding: 2px 6px; font-size: 0.74rem; height: 26px; width: 130px;" onchange="changePlayerRole('${attrJsStr(p.name)}', this.value)" title="Rol en Project Zomboid (setaccesslevel)">
-                        ${roleOpts}
-                    </select>
+                <div class="steam-id-pill ${hasValidSteamId ? '' : 'muted'}">
+                    <span>${escapeHtml(p.steam_id || "Sin SteamID")}</span>
+                    ${hasValidSteamId ? `
+                        <button type="button" class="btn-copy-steam" onclick="copySteamId('${attrJsStr(p.steam_id)}')" title="Copiar SteamID al portapapeles">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    ` : ''}
                 </div>
             </td>
             <td>
-                <div style="font-size: 0.8rem; color: #8b949e; display: flex; align-items: center; gap: 5px;">
+                <select class="form-select player-role-select" onchange="changePlayerRole('${attrJsStr(p.name)}', this.value)" title="Rol en Project Zomboid (setaccesslevel)">
+                    ${roleOpts}
+                </select>
+            </td>
+            <td>
+                <div style="font-size: 0.8rem; color: #8b949e; display: flex; align-items: center; gap: 5px; white-space: nowrap;">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                     <span>${escapeHtml(p.last_seen)}</span>
                 </div>
             </td>
             <td>${statusBadge}</td>
             <td style="text-align: right;">
-                <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap;">
+                <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: nowrap;">
                     ${p.is_online ? `
                         <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.76rem; border-color: #a371f7; color: #d2a8ff;" onclick="openPlayerActionsModal('${attrJsStr(p.name)}')">
                             <span>Acciones</span>
@@ -915,13 +1177,14 @@ function renderPlayersList() {
     });
 }
 
-function copySteamId(steamId) {
+async function copySteamId(steamId) {
     if (!steamId) return;
-    navigator.clipboard.writeText(steamId).then(() => {
+    const copied = await copyTextToClipboard(steamId);
+    if (copied) {
         showToast(`SteamID ${steamId} copiado al portapapeles.`, "success");
-    }).catch(() => {
+    } else {
         showToast(`SteamID: ${steamId}`, "info");
-    });
+    }
 }
 
 async function changePlayerRole(name, accessLevel) {
@@ -1264,6 +1527,7 @@ async function saveAllSettings(e) {
     const panel = {};
 
     document.querySelectorAll("[id^='cfg-']").forEach(el => {
+        if (el.disabled) return;
         const id = el.id;
         const val = el.value;
 
@@ -1297,6 +1561,14 @@ async function saveAllSettings(e) {
             if (panel.use_steam !== undefined) {
                 applySteamModeUI(panel.use_steam !== "false");
             }
+            const topPortEl = document.getElementById("top-server-port");
+            const topPortLabel = document.getElementById("top-server-port-label");
+            if (topPortEl) {
+                const pub = String(panel.public_address || "").trim();
+                const srvPort = server.DefaultPort || (cachedSettingsData && cachedSettingsData.panel && cachedSettingsData.panel.server_port) || 16261;
+                topPortEl.textContent = pub || `${srvPort} (UDP)`;
+                if (topPortLabel) topPortLabel.textContent = pub ? "Dirección Pública:" : "Puerto de Juego:";
+            }
             showToast("Ajustes guardados con éxito en Server.ini y SandboxVars.lua.", "success");
             loadSettings();
         } else {
@@ -1306,8 +1578,6 @@ async function saveAllSettings(e) {
         showToast("Error de conexión al guardar configuraciones.", "error");
     }
 }
-
-const saveSettings = saveAllSettings;
 
 async function reloadOptionsHot() {
     showToast("Enviando 'reloadoptions' a la consola del servidor...", "info");
@@ -1788,15 +2058,14 @@ function pollInstallerProgress() {
                 installerPollTimer = setTimeout(tick, 1500);
             } else if (st.status === "RUNNING" || st.status === "STARTING") {
                 showToast("¡Servidor instalado e iniciándose!", "success");
+                updateControlButtons(st.status);
                 setTimeout(() => {
-                    const instPane = document.getElementById("tab-installer");
-                    if (instPane) instPane.dataset.needsSetup = "false";
+                    updateInstallerTabVisibility(st.is_installed, st.is_setup_done);
                     switchTab("console");
                 }, 900);
             } else if (st.is_installed && st.is_setup_done) {
                 showToast("Descarga de binarios finalizada.", "success");
-                const instPane = document.getElementById("tab-installer");
-                if (instPane) instPane.dataset.needsSetup = "false";
+                updateInstallerTabVisibility(true, true);
             }
         } catch (e) {
             installerPollTimer = setTimeout(tick, 2000);
@@ -1846,6 +2115,8 @@ async function startServerInstallation(e) {
             if (data.installing) {
                 pollInstallerProgress();
             } else {
+                updateInstallerTabVisibility(true, true);
+                fetchMetricsOnce();
                 setTimeout(() => switchTab("console"), 900);
             }
         } else {

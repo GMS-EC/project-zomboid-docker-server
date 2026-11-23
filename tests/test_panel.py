@@ -18,10 +18,12 @@ from app.core.webhook_manager import webhook_manager
 
 
 def test_security_auth_rate_limit_revocation_and_headers(client):
-    # Acceso sin autenticación a "/" redirige a "/login" y entrega headers de seguridad
+    # Acceso sin autenticación a "/" muestra la portada pública + login sin exponer pestañas admin
     r_root = client.get("/", follow_redirects=False)
-    assert r_root.status_code == 302
-    assert r_root.headers["location"].endswith("/login")
+    assert r_root.status_code == 200
+    assert 'action="/login"' in r_root.text
+    assert 'id="landing-connect-address"' in r_root.text
+    assert 'id="tab-files"' not in r_root.text
     assert r_root.headers.get("X-Content-Type-Options") == "nosniff"
     assert r_root.headers.get("X-Frame-Options") == "DENY"
     assert "Content-Security-Policy" in r_root.headers
@@ -762,6 +764,14 @@ def test_gog_nosteam_disables_mods(auth_client):
             }).json()
         assert inst["success"] is True
         assert settings.use_steam is False
+        ini_data = auth_client.get("/api/settings").json()["server"]
+        assert ini_data["Public"] == "false"
+        assert ini_data["SteamVAC"] == "false"
+        assert ini_data["SteamScoreboard"] == "false"
+
+        gog_html = auth_client.get("/").text
+        assert "steam-only-setting" in gog_html
+        assert "Versión: No-Steam / GOG (-nosteam)" in gog_html
 
         mods_state = auth_client.get("/api/mods").json()
         assert mods_state["steam_mode"] is False
@@ -779,3 +789,143 @@ def test_gog_nosteam_disables_mods(auth_client):
         assert auth_client.post("/api/mods", json={"workshop_items": "2687618628"}).status_code == 200
     finally:
         settings.save_runtime_config({"use_steam": True})
+
+
+def test_public_address_and_ui_flags(auth_client):
+    try:
+        resp = auth_client.post("/api/settings", json={
+            "panel": {"public_address": "survivors.gl.at.ply.gg:16299"}
+        }).json()
+        assert resp["success"] is True
+
+        loaded = auth_client.get("/api/settings").json()
+        assert loaded["panel"]["public_address"] == "survivors.gl.at.ply.gg:16299"
+
+        st = auth_client.get("/api/status").json()
+        assert st["public_address"] == "survivors.gl.at.ply.gg:16299"
+        assert "server_port" in st
+
+        metrics = auth_client.get("/api/metrics").json()["current"]
+        assert metrics["public_address"] == "survivors.gl.at.ply.gg:16299"
+        assert "is_installed" in metrics
+        assert "is_setup_done" in metrics
+
+        with patch.object(process_manager, "is_installed", return_value=True), \
+             patch.object(process_manager, "get_status", return_value="OFFLINE"):
+            orig_setup = settings.runtime_config.get("setup_completed")
+            settings.save_runtime_config({"setup_completed": True})
+            try:
+                html = auth_client.get("/").text
+                assert 'id="tab-btn-installer"' in html
+                assert 'style="display: none;"' in html
+                assert 'id="btn-server-stop" class="btn btn-warning" onclick="stopServer()" title="Detener Servidor" disabled' in html
+                assert "survivors.gl.at.ply.gg:16299" in html
+                from app.config import APP_VERSION, get_app_version
+                assert f"v{APP_VERSION}" in html
+                assert f"?v={APP_VERSION}" in html
+                tmp_cl = settings.panel_dir / "CHANGELOG_TEST.md"
+                tmp_cl.write_text("# Changelog\n\n## [1.4.2] - 2026-12-01\n- Release\n", encoding="utf-8")
+                assert get_app_version(tmp_cl) == "1.4.2"
+                assert "https://github.com/GMS-EC/project-zomboid-docker-server" in html
+                assert "https://gmsec.cc" in html
+                footer_html = html.split('<footer class="app-footer">', 1)[1]
+                assert "(Steam / No-Steam)" not in footer_html
+                assert 'id="console-cmd-preset"' in html
+                assert 'id="console-cmd-hint"' in html
+                assert 'class="rcon-quick-bar"' not in html
+                assert "MUNDO:" not in html
+            finally:
+                if orig_setup is None:
+                    settings.runtime_config.pop("setup_completed", None)
+                    settings.save_runtime_config({})
+                else:
+                    settings.save_runtime_config({"setup_completed": orig_setup})
+    finally:
+        settings.save_runtime_config({"public_address": ""})
+
+
+def test_editable_public_landing_page(client, auth_client):
+    try:
+        # Ajustes reales del servidor (.ini + Playit) alimentan la portada automáticamente
+        assert auth_client.post("/api/settings", json={
+            "server": {"PublicName": "Refugio Knox LATAM", "PublicDescription": "Servidor comunitario con eventos semanales.", "MaxPlayers": "28"},
+            "panel": {"public_address": "play.gmsec.cc:16269"},
+        }).status_code == 200
+
+        save_res = auth_client.post("/api/portal", json={
+            "landing_enabled": True,
+            "landing_accent": "amber",
+            "landing_subtitle": "Supervivencia cooperativa 24/7",
+            "landing_announcement": "Temporada 3 activa este fin de semana",
+            "landing_tags": "Hispanohablante, XP x2, Eventos PvE",
+            "landing_rules": "Respetar refugios\nNo hacer spam en chat",
+            "landing_mods_note": "Descarga automática desde Workshop",
+            "landing_discord_url": "https://discord.gg/knox",
+            "landing_show_players": False,
+            "landing_show_online_names": True,
+            "landing_show_rules": True,
+        }).json()
+        assert save_res["success"] is True
+
+        portal_cfg = auth_client.get("/api/portal").json()
+        assert portal_cfg["landing_enabled"] is True
+        assert portal_cfg["landing_accent"] == "amber"
+        assert portal_cfg["public_name"] == "Refugio Knox LATAM"
+        assert portal_cfg["max_players"] == 28
+
+        # Simula jugador en línea para validar roster público cuando landing_show_online_names=True
+        process_manager.online_players["daryl"] = {"name": "DarylDixon", "steam_id": "76561198000000002"}
+
+        # Previsualización autenticada en "/portal" muestra enlace al panel en vez del formulario
+        admin_portal = auth_client.get("/portal").text
+        assert "Refugio Knox LATAM" in admin_portal
+        assert "Abrir panel de administración" in admin_portal
+        assert "https://discord.gg/knox" in admin_portal
+
+        # URLs peligrosas (javascript:) son rechazadas en landing_discord_url
+        auth_client.post("/api/portal", json={"landing_discord_url": "javascript:alert(1)"})
+        assert auth_client.get("/api/portal").json()["landing_discord_url"] == ""
+
+        # Al cerrar sesión, la vista pública en "/" muestra info heredada, personalización y login abajo
+        auth_client.get("/logout", follow_redirects=False)
+        with patch.object(process_manager, "get_status", return_value="RUNNING"):
+            guest_html = client.get("/").text
+        assert "theme-amber" in guest_html
+        assert "Refugio Knox LATAM" in guest_html
+        assert "Supervivencia cooperativa 24/7" in guest_html
+        assert "Temporada 3 activa este fin de semana" in guest_html
+        assert "Hispanohablante" in guest_html
+        assert "Servidor comunitario con eventos semanales." in guest_html
+        assert "<li>Respetar refugios</li>" in guest_html
+        assert "play.gmsec.cc:16269" in guest_html
+        assert "Descarga automática desde Workshop" in guest_html
+        assert "DarylDixon" in guest_html
+        assert f"Servidor: <strong>{settings.server_name}</strong>" in guest_html
+        assert "Capacidad: <strong>28 jugadores</strong>" in guest_html
+        assert 'action="/login"' in guest_html
+        assert 'id="tab-settings"' not in guest_html
+
+        # Deshabilitar portada pública oculta info/IP al público y muestra solo el login clásico
+        settings.save_runtime_config({"landing_enabled": False})
+        disabled_html = client.get("/").text
+        assert "Refugio Knox LATAM" not in disabled_html
+        assert 'id="landing-connect-address"' not in disabled_html
+        assert 'action="/login"' in disabled_html
+        assert client.get("/portal", follow_redirects=False).status_code == 302
+    finally:
+        process_manager.online_players.clear()
+        process_manager.status = "OFFLINE"
+        settings.save_runtime_config({
+            "landing_enabled": True,
+            "landing_accent": "emerald",
+            "public_address": "",
+            "landing_subtitle": "Servidor Dedicado de Project Zomboid",
+            "landing_announcement": "",
+            "landing_tags": "",
+            "landing_rules": "",
+            "landing_mods_note": "",
+            "landing_discord_url": "",
+            "landing_show_players": True,
+            "landing_show_online_names": False,
+            "landing_show_rules": True,
+        })

@@ -17,7 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
-from app.config import settings, BASE_DIR
+from app.config import settings, BASE_DIR, APP_VERSION
 from app.core.security import (
     create_session_token, verify_session_token, verify_admin_credentials,
     is_authenticated, require_auth, revoke_token, extract_token_from_request,
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Project Zomboid Server Manager",
     description="Panel Web para Servidor Dedicado de Project Zomboid (Steam / No-Steam)",
-    version="0.3.0",
+    version=APP_VERSION,
     lifespan=lifespan,
     docs_url=None,
     redoc_url=None,
@@ -135,16 +135,97 @@ def _augment_metrics(metrics: dict, include_players: bool = False) -> dict:
         m["session_name"] = settings.server_name
         m["world"] = settings.world_label
         m["steam_mode"] = settings.use_steam
+        m["server_port"] = settings.server_port
+        m["public_address"] = settings.public_address
+        m["is_installed"] = process_manager.is_installed()
+        m["is_setup_done"] = settings.is_setup_done
     if process_manager.status == "INSTALLING":
         m["install_progress"] = process_manager.install_progress
     return m
+
+
+def _ini_int(ini: dict, key: str, fallback: int) -> int:
+    try:
+        val = int(str(ini.get(key, "")).strip())
+        return val if val > 0 else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _effective_server_title(ini: dict) -> str:
+    pub_name = str(ini.get("PublicName", "") or "").strip()
+    if pub_name and pub_name != "Project Zomboid Server":
+        return pub_name
+    return settings.server_name or pub_name or "Project Zomboid Server"
+
+
+def _public_server_summary(ini: dict) -> dict:
+    """Extrae resumen público no sensible desde Server.ini y settings."""
+    return {
+        "server_name": settings.server_name,
+        "public_name": _effective_server_title(ini),
+        "public_description": str(ini.get("PublicDescription", "") or "").strip(),
+        "max_players": _ini_int(ini, "MaxPlayers", settings.max_players),
+        "server_port": _ini_int(ini, "DefaultPort", settings.server_port),
+        "direct_port": _ini_int(ini, "UDPPort", settings.direct_port),
+        "public_address": settings.public_address,
+    }
+
+
+def _landing_context(request: Request, error: Optional[str] = None, scroll_to_login: bool = False) -> dict:
+    """Construye el contexto público seguro para la página principal y el acceso admin."""
+    ini = pz_settings_manager.read_ini()
+    srv = _public_server_summary(ini)
+    server_rules = [line.strip() for line in settings.landing_rules.splitlines() if line.strip()]
+    landing_tags = [t.strip() for t in settings.landing_tags.split(",") if t.strip()]
+    online_names = [
+        str(p.get("name", "")).strip()
+        for p in process_manager.online_players.values()
+        if str(p.get("name", "")).strip()
+    ]
+    return {
+        "is_admin": is_authenticated(request),
+        "landing_enabled": settings.landing_enabled,
+        "landing_accent": settings.landing_accent,
+        "landing_announcement": settings.landing_announcement,
+        "landing_tags": landing_tags,
+        "error": error,
+        "scroll_to_login": scroll_to_login,
+        "server_name": srv["server_name"],
+        "public_name": str(ini.get("PublicName", "") or "").strip(),
+        "server_title": srv["public_name"],
+        "server_subtitle": settings.landing_subtitle or "Servidor Dedicado de Project Zomboid",
+        "server_description": srv["public_description"],
+        "server_rules": server_rules,
+        "mods_note": settings.landing_mods_note,
+        "discord_url": settings.landing_discord_url,
+        "show_players": settings.landing_show_players,
+        "show_online_names": settings.landing_show_online_names,
+        "online_names": online_names,
+        "show_rules": settings.landing_show_rules,
+        "server_status": process_manager.get_status(),
+        "players_online": len(process_manager.online_players),
+        "max_players": srv["max_players"],
+        "server_port": srv["server_port"],
+        "direct_port": srv["direct_port"],
+        "public_address": srv["public_address"],
+        "steam_mode": settings.use_steam,
+        "pvp_enabled": str(ini.get("PVP", "true")).lower() == "true",
+        "has_password": bool(str(ini.get("Password", "")).strip()),
+        "world": settings.world_label,
+        "panel_version": app.version,
+    }
 
 
 # --- Páginas HTML ---------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     if not is_authenticated(request):
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context=_landing_context(request),
+        )
     metrics = _augment_metrics(metrics_manager.get_current_metrics(), include_players=True)
     return templates.TemplateResponse(
         request=request,
@@ -162,12 +243,29 @@ async def dashboard(request: Request):
             "timezone": settings.timezone,
             "server_port": settings.server_port,
             "direct_port": settings.direct_port,
+            "public_address": settings.public_address,
             "memory_min": settings.memory_min,
             "memory_max": settings.memory_max,
             "branch": settings.branch,
             "panel_version": app.version,
             "asset_v": START_TIME_TOKEN,
         },
+    )
+
+
+@app.get("/portal", response_class=HTMLResponse)
+async def public_portal(request: Request):
+    if not settings.landing_enabled and not is_authenticated(request):
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    ctx = _landing_context(request)
+    if not settings.landing_enabled:
+        # El administrador siempre puede previsualizar el diseño aunque esté deshabilitado al público
+        ctx["landing_enabled"] = True
+        ctx["preview_disabled"] = True
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context=ctx,
     )
 
 
@@ -178,7 +276,11 @@ async def login_page(request: Request):
     client_ip = get_client_ip(request)
     is_locked, remaining = login_limiter.is_locked(client_ip)
     err = f"Demasiados intentos fallidos. Espera {remaining}s antes de volver a intentar." if is_locked else None
-    return templates.TemplateResponse(request=request, name="login.html", context={"error": err})
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context=_landing_context(request, error=err, scroll_to_login=True),
+    )
 
 
 @app.post("/login")
@@ -194,7 +296,11 @@ async def login_post(
         return templates.TemplateResponse(
             request=request,
             name="login.html",
-            context={"error": f"IP bloqueada temporalmente por seguridad. Espera {remaining}s."},
+            context=_landing_context(
+                request,
+                error=f"IP bloqueada temporalmente por seguridad. Espera {remaining}s.",
+                scroll_to_login=True,
+            ),
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         )
 
@@ -234,7 +340,7 @@ async def login_post(
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"error": msg},
+        context=_landing_context(request, error=msg, scroll_to_login=True),
         status_code=status.HTTP_401_UNAUTHORIZED,
     )
 
@@ -244,7 +350,7 @@ async def logout(request: Request):
     token = extract_token_from_request(request)
     revoke_token(token)
     activity_manager.log("Seguridad", "Sesión cerrada por el administrador", action="logout")
-    res = RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+    res = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     res.delete_cookie(SESSION_COOKIE_NAME)
     return res
 
@@ -253,6 +359,7 @@ async def logout(request: Request):
 async def health_check():
     return {
         "status": "ok",
+        "version": app.version,
         "server_status": process_manager.get_status(),
         "installed": process_manager.is_installed(),
         "mode": "steam" if settings.use_steam else "nosteam",
@@ -318,6 +425,7 @@ async def websocket_console(websocket: WebSocket):
 async def api_status():
     metrics = _augment_metrics(metrics_manager.get_current_metrics(), include_players=True)
     return {
+        "version": app.version,
         "status": process_manager.get_status(),
         "is_installed": process_manager.is_installed(),
         "is_setup_done": settings.is_setup_done,
@@ -327,6 +435,8 @@ async def api_status():
         "session_name": settings.server_name,
         "world": settings.world_label,
         "steam_mode": settings.use_steam,
+        "server_port": settings.server_port,
+        "public_address": settings.public_address,
         "players_online": metrics.get("players_online", 0),
         "max_players": settings.max_players,
         "metrics": metrics,
@@ -366,6 +476,9 @@ async def api_server_install(payload: Optional[dict] = None):
         if not settings.use_steam:
             ini_updates["WorkshopItems"] = ""
             ini_updates["Mods"] = ""
+            ini_updates["Public"] = "false"
+            ini_updates["SteamVAC"] = "false"
+            ini_updates["SteamScoreboard"] = "false"
         if "pvp" in p:
             ini_updates["PVP"] = "true" if settings._rt_bool(p["pvp"], False) else "false"
         if "server_password" in p:
@@ -1008,3 +1121,45 @@ async def api_activity_export(format: str = Query("csv", pattern="^(txt|json|csv
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ----------------------------- Portada Pública -----------------------------
+@app.get("/api/portal", dependencies=[Depends(require_auth)])
+async def api_portal_get():
+    ini = pz_settings_manager.read_ini()
+    return {
+        "landing_enabled": settings.landing_enabled,
+        "landing_accent": settings.landing_accent,
+        "landing_subtitle": settings.landing_subtitle,
+        "landing_announcement": settings.landing_announcement,
+        "landing_tags": settings.landing_tags,
+        "landing_rules": settings.landing_rules,
+        "landing_mods_note": settings.landing_mods_note,
+        "landing_discord_url": settings.landing_discord_url,
+        "landing_show_players": settings.landing_show_players,
+        "landing_show_online_names": settings.landing_show_online_names,
+        "landing_show_rules": settings.landing_show_rules,
+        **_public_server_summary(ini),
+    }
+
+
+@app.post("/api/portal", dependencies=[Depends(require_auth)])
+async def api_portal_save(payload: Optional[dict] = None):
+    p = payload or {}
+    updates = {}
+    for bkey, default_b in (("landing_enabled", True), ("landing_show_players", True), ("landing_show_online_names", False), ("landing_show_rules", True)):
+        if bkey in p:
+            updates[bkey] = settings._rt_bool(p[bkey], default_b)
+    if "landing_accent" in p:
+        acc = str(p["landing_accent"] or "emerald").strip().lower()
+        updates["landing_accent"] = acc if acc in ("emerald", "amber", "crimson", "cyan") else "emerald"
+    for key in ("landing_subtitle", "landing_announcement", "landing_tags", "landing_rules", "landing_mods_note"):
+        if key in p:
+            updates[key] = str(p[key] or "").strip()
+    if "landing_discord_url" in p:
+        raw_url = str(p["landing_discord_url"] or "").strip()
+        updates["landing_discord_url"] = raw_url if raw_url.startswith(("http://", "https://")) else ""
+    if updates:
+        settings.save_runtime_config(updates)
+        activity_manager.log("Portada", "Configuración de página principal actualizada", action="portal_saved")
+    return {"success": True, "config": await api_portal_get()}

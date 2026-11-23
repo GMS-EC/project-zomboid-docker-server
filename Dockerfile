@@ -63,6 +63,7 @@ RUN --mount=type=bind,source=requirements.txt,target=/tmp/requirements.txt \
 
 COPY --chown=steam:steam app/ /app/app/
 COPY --chown=steam:steam web/ /app/web/
+COPY --chown=steam:steam CHANGELOG.md /app/CHANGELOG.md
 
 COPY --chown=steam:steam ./scripts /home/steam/scripts/
 RUN sed -i 's/\r$//' /home/steam/scripts/*.sh && \
